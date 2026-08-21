@@ -2409,9 +2409,9 @@ def cmd_start(message):
         return
     
     safe_send_message(message.chat.id, f"""
-🤖 <b>GARENA CHECKER BOT V6.1 - HACKER EDITION</b>
+<b>GARENA CHECKER BOT - HACKER EDITION</b>
 👤 Admin: @baohuyno1
-🎵 TikTok: @baohuy1109
+
 
 📌 <b>LENH:</b>
 /check user:pass - Check 1 acc
@@ -2420,9 +2420,6 @@ def cmd_start(message):
 /services - Danh sach service
 /stop - Dung check
 
-⚠️ <b>KHONG LUU ACCOUNT!</b>
-🔊 AM THANH TU DONG PHAT TREN WEB!
-🚫 DA BO LENH /hits VA /report
 """)
 
 @bot.message_handler(commands=['check'])
