@@ -1,11 +1,11 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - UI CAI TIEN + ICON THUC TE
+#    GARENA CHECKER BOT V6.1 - CAI TIEN CHECK NHIEU + LUU THONG KE
 # ========================================================================
-#    - Cai tien giao dien web voi icon that cua tung app
-#    - Them nut chi tiet cho tung dich vu trong /services
-#    - Hieu ung 3D + hacker dep
+#    - Cai tien tra ket qua check nhieu: hien thi tong hop
+#    - Luu thong ke so acc da check vao file
+#    - Hieu ung 3D + Hacker dep
 #    - Am thanh tu dong phat
-#    - Khong luu account
+#    - KHONG luu account (chi luu thong ke)
 # ========================================================================
 
 import subprocess
@@ -49,6 +49,38 @@ CUSTOM_AUDIO_PATH = "custom_audio.wav"
 CUSTOM_AUDIO_DATA = None
 AUDIO_LOCK = threading.Lock()
 
+# ========== FILE LUU THONG KE ==========
+STATS_FILE = "check_stats.json"
+
+def load_stats():
+    """Doc thong ke tu file"""
+    try:
+        if os.path.exists(STATS_FILE):
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except:
+        pass
+    return {"total_checked": 0, "total_hits": 0, "total_dead": 0, "total_errors": 0, "last_check": None}
+
+def save_stats(stats_data):
+    """Luu thong ke vao file"""
+    try:
+        with open(STATS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(stats_data, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+def update_stats(hit_count=0, dead_count=0, error_count=0):
+    """Cap nhat thong ke"""
+    stats_data = load_stats()
+    stats_data["total_checked"] += hit_count + dead_count + error_count
+    stats_data["total_hits"] += hit_count
+    stats_data["total_dead"] += dead_count
+    stats_data["total_errors"] += error_count
+    stats_data["last_check"] = datetime.now().isoformat()
+    save_stats(stats_data)
+    return stats_data
+
 class RenderHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
@@ -65,6 +97,7 @@ class RenderHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
+            stats_data = load_stats()
             stats_json = json.dumps({
                 "status": "alive",
                 "checking": checking,
@@ -72,7 +105,8 @@ class RenderHandler(BaseHTTPRequestHandler):
                 "services": list(SERVICE_ROUTES.keys()),
                 "admin": ADMIN_USERNAME,
                 "version": "6.1",
-                "audio_custom": CUSTOM_AUDIO_DATA is not None
+                "audio_custom": CUSTOM_AUDIO_DATA is not None,
+                "total_stats": stats_data
             })
             self.wfile.write(stats_json.encode('utf-8'))
         elif self.path == '/api/services':
@@ -159,20 +193,22 @@ class RenderHandler(BaseHTTPRequestHandler):
         except:
             pass
         
+        # Lay thong ke tong
+        total_stats = load_stats()
+        total_checked = total_stats.get("total_checked", 0)
+        total_hits = total_stats.get("total_hits", 0)
+        
         bot_status = "Dang check" if checking else "San sang"
         bot_color = "#ff9800" if checking else "#4caf50"
         
         services_html = ""
         for key, value in SERVICE_ROUTES.items():
-            # Icon that cho tung app
-            icon = value.get('icon', '📱')
-            desc = value.get('desc', key)
             services_html += f"""
             <div class="service-card" data-service="{key}" onclick="showServiceDetail('{key}')">
-                <div class="service-icon">{icon}</div>
+                <div class="service-icon">{value['icon']}</div>
                 <div class="service-info">
                     <div class="service-name">{key}</div>
-                    <div class="service-desc">{desc}</div>
+                    <div class="service-desc">{value['desc']}</div>
                 </div>
                 <div class="service-arrow">›</div>
             </div>"""
@@ -197,672 +233,170 @@ body {
     user-select: none;
 }
 
-/* ===== BACKGROUND ANIMATION ===== */
-#bg-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    opacity: 0.25;
-}
+#bg-canvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:0; opacity:0.25; }
+#matrix-canvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:0; opacity:0.12; }
+#laser-canvas { position:fixed; top:0; left:0; width:100%; height:100%; z-index:1; pointer-events:none; }
 
-#matrix-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 0;
-    opacity: 0.12;
-}
-
-#laser-canvas {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    z-index: 1;
-    pointer-events: none;
-}
-
-/* ===== CONTAINER ===== */
 .container {
-    position: relative;
-    z-index: 2;
-    max-width: 1100px;
-    margin: 15px auto;
-    padding: 20px;
-    perspective: 1200px;
-    max-height: 98vh;
-    overflow-y: auto;
+    position:relative; z-index:2;
+    max-width:1100px; margin:15px auto; padding:20px;
+    perspective:1200px;
+    max-height:98vh; overflow-y:auto;
 }
+.container::-webkit-scrollbar { width:4px; }
+.container::-webkit-scrollbar-track { background:rgba(0,255,0,0.05); }
+.container::-webkit-scrollbar-thumb { background:#00ff00; border-radius:10px; }
 
-.container::-webkit-scrollbar {
-    width: 4px;
-}
-.container::-webkit-scrollbar-track {
-    background: rgba(0,255,0,0.05);
-}
-.container::-webkit-scrollbar-thumb {
-    background: #00ff00;
-    border-radius: 10px;
-}
-
-/* ===== HEADER ===== */
 .header {
-    text-align: center;
-    padding: 30px 25px;
-    background: rgba(0, 0, 0, 0.85);
-    border-radius: 20px;
-    border: 2px solid #00ff00;
-    box-shadow: 0 0 50px rgba(0,255,0,0.15), inset 0 0 50px rgba(0,255,0,0.03);
-    position: relative;
-    overflow: hidden;
-    transform: rotateX(1deg) rotateY(1deg);
-    transition: all 0.5s ease;
-    animation: float3d 6s ease-in-out infinite;
+    text-align:center; padding:30px 25px;
+    background:rgba(0,0,0,0.85);
+    border-radius:20px;
+    border:2px solid #00ff00;
+    box-shadow:0 0 50px rgba(0,255,0,0.15), inset 0 0 50px rgba(0,255,0,0.03);
+    position:relative; overflow:hidden;
+    transform:rotateX(1deg) rotateY(1deg);
+    transition:all 0.5s ease;
+    animation:float3d 6s ease-in-out infinite;
 }
-
-.header:hover {
-    transform: rotateX(0deg) rotateY(0deg) scale(1.01);
-    box-shadow: 0 0 80px rgba(0,255,0,0.3), inset 0 0 80px rgba(0,255,0,0.05);
-}
-
-@keyframes float3d {
-    0%, 100% { transform: rotateX(1deg) rotateY(1deg); }
-    50% { transform: rotateX(-1deg) rotateY(-1deg); }
-}
-
+.header:hover { transform:rotateX(0deg) rotateY(0deg) scale(1.01); box-shadow:0 0 80px rgba(0,255,0,0.3), inset 0 0 80px rgba(0,255,0,0.05); }
+@keyframes float3d { 0%,100%{transform:rotateX(1deg) rotateY(1deg);} 50%{transform:rotateX(-1deg) rotateY(-1deg);} }
 .header::before {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: conic-gradient(
-        from 0deg,
-        transparent,
-        rgba(0,255,0,0.04),
-        transparent,
-        rgba(0,255,255,0.04),
-        transparent,
-        rgba(255,0,255,0.04),
-        transparent
-    );
-    animation: rotate 15s linear infinite;
+    content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%;
+    background:conic-gradient(from 0deg,transparent,rgba(0,255,0,0.04),transparent,rgba(0,255,255,0.04),transparent,rgba(255,0,255,0.04),transparent);
+    animation:rotate 15s linear infinite;
 }
-
-@keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-
+@keyframes rotate { from{transform:rotate(0deg);} to{transform:rotate(360deg);} }
 .header::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0,255,0,0.02) 2px,
-        rgba(0,255,0,0.02) 4px
-    );
-    pointer-events: none;
+    content:''; position:absolute; top:0; left:0; width:100%; height:100%;
+    background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,0,0.02) 2px,rgba(0,255,0,0.02) 4px);
+    pointer-events:none;
 }
 
 .title {
-    font-size: 2.8em;
-    font-weight: 900;
-    font-family: 'Orbitron', sans-serif;
-    color: #00ff00;
-    text-shadow: 
-        0 0 20px rgba(0,255,0,0.8),
-        0 0 40px rgba(0,255,0,0.5),
-        0 0 80px rgba(0,255,0,0.3),
-        3px 3px 0 #ff00ff,
-        -3px -3px 0 #00ffff;
-    animation: glitch3d 3s infinite, textPulse 2s infinite;
-    position: relative;
-    z-index: 2;
-    transform: translateZ(50px);
-    letter-spacing: 2px;
+    font-size:2.8em; font-weight:900; font-family:'Orbitron',sans-serif;
+    color:#00ff00;
+    text-shadow:0 0 20px rgba(0,255,0,0.8), 0 0 40px rgba(0,255,0,0.5), 0 0 80px rgba(0,255,0,0.3), 3px 3px 0 #ff00ff, -3px -3px 0 #00ffff;
+    animation:glitch3d 3s infinite, textPulse 2s infinite;
+    position:relative; z-index:2; transform:translateZ(50px); letter-spacing:2px;
 }
-
 @keyframes glitch3d {
-    0%, 100% { 
-        transform: translateZ(50px) skew(0deg);
-        text-shadow: 0 0 20px rgba(0,255,0,0.8), 3px 3px 0 #ff00ff, -3px -3px 0 #00ffff;
-    }
-    20% { 
-        transform: translateZ(50px) skew(1.5deg);
-        text-shadow: -3px 0 20px #ff0000, 3px 0 20px #00ffff, 0 0 40px #00ff00;
-    }
-    40% { 
-        transform: translateZ(50px) skew(-1.5deg);
-        text-shadow: 3px 0 20px #ff00ff, -3px 0 20px #ffff00, 0 0 40px #00ff00;
-    }
-    60% { 
-        transform: translateZ(50px) skew(1deg);
-        text-shadow: 0 0 30px #00ff00, 5px 5px 0 #ff00ff, -5px -5px 0 #00ffff;
-    }
-    80% { 
-        transform: translateZ(50px) skew(-1deg);
-        text-shadow: 0 0 30px #00ff00, -5px 5px 0 #ff00ff, 5px -5px 0 #00ffff;
-    }
+    0%,100%{transform:translateZ(50px) skew(0deg);text-shadow:0 0 20px rgba(0,255,0,0.8),3px 3px 0 #ff00ff,-3px -3px 0 #00ffff;}
+    20%{transform:translateZ(50px) skew(1.5deg);text-shadow:-3px 0 20px #ff0000,3px 0 20px #00ffff,0 0 40px #00ff00;}
+    40%{transform:translateZ(50px) skew(-1.5deg);text-shadow:3px 0 20px #ff00ff,-3px 0 20px #ffff00,0 0 40px #00ff00;}
+    60%{transform:translateZ(50px) skew(1deg);text-shadow:0 0 30px #00ff00,5px 5px 0 #ff00ff,-5px -5px 0 #00ffff;}
+    80%{transform:translateZ(50px) skew(-1deg);text-shadow:0 0 30px #00ff00,-5px 5px 0 #ff00ff,5px -5px 0 #00ffff;}
 }
+@keyframes textPulse { 0%,100%{opacity:1;} 50%{opacity:0.9;} }
 
-@keyframes textPulse {
-    0%, 100% { opacity: 1; }
-    50% { opacity: 0.9; }
-}
+.subtitle { font-size:1em; color:#88ff88; text-shadow:0 0 20px rgba(0,255,0,0.2); animation:flicker 2s infinite; position:relative; z-index:2; font-weight:400; letter-spacing:3px; }
+@keyframes flicker { 0%,100%{opacity:1;}5%{opacity:0.5;}10%{opacity:1;}95%{opacity:1;}96%{opacity:0.3;}97%{opacity:1;} }
 
-.subtitle {
-    font-size: 1em;
-    color: #88ff88;
-    text-shadow: 0 0 20px rgba(0,255,0,0.2);
-    animation: flicker 2s infinite;
-    position: relative;
-    z-index: 2;
-    font-weight: 400;
-    letter-spacing: 3px;
-}
-
-@keyframes flicker {
-    0%, 100% { opacity: 1; }
-    5% { opacity: 0.5; }
-    10% { opacity: 1; }
-    95% { opacity: 1; }
-    96% { opacity: 0.3; }
-    97% { opacity: 1; }
-}
-
-/* ===== SOCIAL BUTTONS ===== */
-.social-buttons {
-    display: flex;
-    justify-content: center;
-    gap: 15px;
-    margin-top: 15px;
-    position: relative;
-    z-index: 2;
-    transform: translateZ(30px);
-    flex-wrap: wrap;
-}
-
+.social-buttons { display:flex; justify-content:center; gap:15px; margin-top:15px; position:relative; z-index:2; transform:translateZ(30px); flex-wrap:wrap; }
 .social-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 22px;
-    border-radius: 50px;
-    font-weight: 700;
-    font-size: 0.85em;
-    color: white;
-    text-decoration: none;
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    position: relative;
-    overflow: hidden;
-    border: none;
-    cursor: pointer;
-    transform: rotateX(3deg) rotateY(3deg);
-    font-family: 'Inter', sans-serif;
+    display:inline-flex; align-items:center; gap:8px;
+    padding:10px 22px; border-radius:50px;
+    font-weight:700; font-size:0.85em; color:white;
+    text-decoration:none; transition:all 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+    position:relative; overflow:hidden; border:none; cursor:pointer;
+    transform:rotateX(3deg) rotateY(3deg); font-family:'Inter',sans-serif;
 }
+.social-btn:hover { transform:rotateX(0deg) rotateY(0deg) scale(1.08) translateZ(20px); box-shadow:0 20px 60px rgba(0,255,0,0.25); }
+.social-btn.tiktok { background:linear-gradient(135deg,#00f2ea,#ff0050); box-shadow:0 0 30px rgba(255,0,80,0.25); }
+.social-btn.telegram { background:linear-gradient(135deg,#0088cc,#004488); box-shadow:0 0 30px rgba(0,136,204,0.25); }
 
-.social-btn:hover {
-    transform: rotateX(0deg) rotateY(0deg) scale(1.08) translateZ(20px);
-    box-shadow: 0 20px 60px rgba(0,255,0,0.25);
-}
-
-.social-btn.tiktok {
-    background: linear-gradient(135deg, #00f2ea, #ff0050);
-    box-shadow: 0 0 30px rgba(255,0,80,0.25);
-}
-
-.social-btn.telegram {
-    background: linear-gradient(135deg, #0088cc, #004488);
-    box-shadow: 0 0 30px rgba(0,136,204,0.25);
-}
-
-/* ===== STATUS BADGE ===== */
 .status-badge {
-    display: inline-block;
-    padding: 10px 25px;
-    border-radius: 50px;
-    font-weight: 700;
-    font-size: 1em;
-    margin-top: 12px;
-    background: BOT_COLOR;
-    color: white;
-    box-shadow: 0 0 30px rgba(0,255,0,0.4);
-    animation: pulse3d 2s infinite;
-    position: relative;
-    z-index: 2;
-    transform: translateZ(40px);
-    font-family: 'Inter', sans-serif;
+    display:inline-block; padding:10px 25px; border-radius:50px;
+    font-weight:700; font-size:1em; margin-top:12px;
+    background: BOT_COLOR; color:white;
+    box-shadow:0 0 30px rgba(0,255,0,0.4);
+    animation:pulse3d 2s infinite;
+    position:relative; z-index:2; transform:translateZ(40px);
+    font-family:'Inter',sans-serif;
 }
+@keyframes pulse3d { 0%,100%{transform:translateZ(40px) scale(1);box-shadow:0 0 30px rgba(0,255,0,0.4);} 50%{transform:translateZ(55px) scale(1.03);box-shadow:0 0 50px rgba(0,255,0,0.7);} }
 
-@keyframes pulse3d {
-    0%, 100% { transform: translateZ(40px) scale(1); box-shadow: 0 0 30px rgba(0,255,0,0.4); }
-    50% { transform: translateZ(55px) scale(1.03); box-shadow: 0 0 50px rgba(0,255,0,0.7); }
-}
-
-/* ===== AUDIO INDICATOR ===== */
 .audio-indicator {
-    display: inline-block;
-    padding: 6px 16px;
-    border-radius: 50px;
-    font-size: 0.8em;
-    margin-top: 8px;
-    background: rgba(0,255,0,0.1);
-    border: 1px solid #00ff00;
-    color: #00ff00;
-    position: relative;
-    z-index: 2;
-    animation: audioPulse 1.5s infinite;
-    font-family: 'Inter', sans-serif;
+    display:inline-block; padding:6px 16px; border-radius:50px;
+    font-size:0.8em; margin-top:8px;
+    background:rgba(0,255,0,0.1); border:1px solid #00ff00;
+    color:#00ff00; position:relative; z-index:2;
+    animation:audioPulse 1.5s infinite; font-family:'Inter',sans-serif;
 }
+.audio-indicator .dot { display:inline-block; width:8px; height:8px; background:#00ff00; border-radius:50%; margin-right:8px; animation:dotPulse 1s infinite; }
+@keyframes audioPulse { 0%,100%{box-shadow:0 0 15px rgba(0,255,0,0.1);} 50%{box-shadow:0 0 30px rgba(0,255,0,0.3);} }
+@keyframes dotPulse { 0%,100%{transform:scale(1);opacity:1;} 50%{transform:scale(1.6);opacity:0.5;} }
 
-.audio-indicator .dot {
-    display: inline-block;
-    width: 8px;
-    height: 8px;
-    background: #00ff00;
-    border-radius: 50%;
-    margin-right: 8px;
-    animation: dotPulse 1s infinite;
-}
-
-@keyframes audioPulse {
-    0%, 100% { box-shadow: 0 0 15px rgba(0,255,0,0.1); }
-    50% { box-shadow: 0 0 30px rgba(0,255,0,0.3); }
-}
-
-@keyframes dotPulse {
-    0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.6); opacity: 0.5; }
-}
-
-/* ===== STATS GRID ===== */
 .stats-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 15px;
-    margin: 20px 0;
-    transform: translateZ(20px);
+    display:grid; grid-template-columns:repeat(6, 1fr); gap:12px; margin:20px 0; transform:translateZ(20px);
 }
-
 .stat-card {
-    background: linear-gradient(145deg, rgba(0,255,0,0.04), rgba(0,0,0,0.8));
-    border-radius: 14px;
-    padding: 20px 15px;
-    text-align: center;
-    border: 1px solid rgba(0,255,0,0.15);
-    box-shadow: 0 8px 25px rgba(0,0,0,0.4);
-    transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    cursor: pointer;
-    transform: rotateX(3deg);
-    position: relative;
-    overflow: hidden;
+    background:linear-gradient(145deg,rgba(0,255,0,0.04),rgba(0,0,0,0.8));
+    border-radius:12px; padding:15px 12px; text-align:center;
+    border:1px solid rgba(0,255,0,0.15);
+    box-shadow:0 8px 25px rgba(0,0,0,0.4);
+    transition:all 0.5s cubic-bezier(0.175,0.885,0.32,1.275);
+    cursor:pointer; transform:rotateX(3deg);
+    position:relative; overflow:hidden;
 }
+.stat-card:hover { transform:rotateX(0deg) scale(1.04) translateZ(25px); border-color:#00ff00; box-shadow:0 15px 40px rgba(0,255,0,0.2); }
+.stat-card::before { content:''; position:absolute; top:0; left:0; width:100%; height:2px; background:linear-gradient(90deg,transparent,#00ff00,transparent); animation:shimmer 2s infinite; }
+@keyframes shimmer { 0%{transform:translateX(-100%);} 100%{transform:translateX(100%);} }
+.stat-value { font-size:1.8em; font-weight:900; margin-bottom:3px; text-shadow:0 0 30px currentColor; font-family:'Orbitron',sans-serif; }
+.stat-label { font-size:0.6em; color:#88aa88; text-transform:uppercase; letter-spacing:1px; font-weight:600; }
+.stat-hits .stat-value { color:#00ff00; }
+.stat-error .stat-value { color:#ff6b35; }
+.stat-checked .stat-value { color:#00ccff; }
+.stat-total .stat-value { color:#ff00ff; }
+.stat-totalchecked .stat-value { color:#ffaa00; }
+.stat-time .stat-value { color:#ff00ff; font-size:1em; }
 
-.stat-card:hover {
-    transform: rotateX(0deg) scale(1.04) translateZ(25px);
-    border-color: #00ff00;
-    box-shadow: 0 15px 40px rgba(0,255,0,0.2);
-}
-
-.stat-card::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #00ff00, transparent);
-    animation: shimmer 2s infinite;
-}
-
-@keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-}
-
-.stat-value {
-    font-size: 2.4em;
-    font-weight: 900;
-    margin-bottom: 5px;
-    text-shadow: 0 0 30px currentColor;
-    font-family: 'Orbitron', sans-serif;
-}
-
-.stat-label {
-    font-size: 0.7em;
-    color: #88aa88;
-    text-transform: uppercase;
-    letter-spacing: 2px;
-    font-weight: 600;
-}
-
-.stat-hits .stat-value { color: #00ff00; }
-.stat-error .stat-value { color: #ff6b35; }
-.stat-checked .stat-value { color: #00ccff; }
-.stat-time .stat-value { color: #ff00ff; font-size: 1.2em; }
-
-/* ===== SERVICES ===== */
-.section-title {
-    font-size: 1.6em;
-    text-align: center;
-    margin: 25px 0 15px;
-    text-shadow: 0 0 30px rgba(0,255,0,0.2);
-    animation: flicker 2s infinite;
-    transform: translateZ(30px);
-    font-family: 'Orbitron', sans-serif;
-    letter-spacing: 2px;
-}
-
-.services-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 12px;
-    margin-bottom: 20px;
-    transform: translateZ(10px);
-}
-
+.section-title { font-size:1.6em; text-align:center; margin:25px 0 15px; text-shadow:0 0 30px rgba(0,255,0,0.2); animation:flicker 2s infinite; transform:translateZ(30px); font-family:'Orbitron',sans-serif; letter-spacing:2px; }
+.services-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:20px; transform:translateZ(10px); }
 .service-card {
-    background: linear-gradient(145deg, rgba(0,255,0,0.04), rgba(0,0,0,0.7));
-    border-radius: 12px;
-    padding: 16px 18px;
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    border: 1px solid rgba(0,255,0,0.08);
-    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-    cursor: pointer;
-    position: relative;
-    overflow: hidden;
+    background:linear-gradient(145deg,rgba(0,255,0,0.04),rgba(0,0,0,0.7));
+    border-radius:12px; padding:14px 16px; display:flex; align-items:center; gap:12px;
+    border:1px solid rgba(0,255,0,0.08);
+    transition:all 0.4s cubic-bezier(0.175,0.885,0.32,1.275);
+    cursor:pointer; position:relative; overflow:hidden;
 }
+.service-card:hover { transform:translateZ(25px) scale(1.04); border-color:#00ff00; box-shadow:0 12px 35px rgba(0,255,0,0.15); background:linear-gradient(145deg,rgba(0,255,0,0.08),rgba(0,0,0,0.8)); }
+.service-card::after { content:''; position:absolute; top:-50%; left:-50%; width:200%; height:200%; background:conic-gradient(from 0deg,transparent,rgba(0,255,0,0.04),transparent,rgba(0,255,255,0.04),transparent); animation:rotate 10s linear infinite; opacity:0; transition:opacity 0.3s; }
+.service-card:hover::after { opacity:1; }
+.service-icon { font-size:1.8em; position:relative; z-index:2; flex-shrink:0; width:44px; height:44px; display:flex; align-items:center; justify-content:center; background:rgba(0,255,0,0.06); border-radius:12px; border:1px solid rgba(0,255,0,0.08); }
+.service-info { flex:1; position:relative; z-index:2; }
+.service-name { font-size:0.95em; font-weight:700; color:#fff; margin-bottom:2px; font-family:'Inter',sans-serif; }
+.service-desc { font-size:0.65em; color:#88aa88; font-weight:400; }
+.service-arrow { font-size:1.2em; color:#446644; transition:all 0.3s; position:relative; z-index:2; }
+.service-card:hover .service-arrow { color:#00ff00; transform:translateX(5px); }
 
-.service-card:hover {
-    transform: translateZ(25px) scale(1.04);
-    border-color: #00ff00;
-    box-shadow: 0 12px 35px rgba(0,255,0,0.15);
-    background: linear-gradient(145deg, rgba(0,255,0,0.08), rgba(0,0,0,0.8));
+.footer { text-align:center; padding:15px; color:#446644; font-size:0.7em; border-top:1px solid rgba(0,255,0,0.06); margin-top:15px; transform:translateZ(10px); font-weight:400; letter-spacing:1px; }
+.footer a { color:#00ff00; text-decoration:none; transition:all 0.3s; }
+.footer a:hover { color:#ff00ff; text-shadow:0 0 20px #ff00ff; }
+
+@media (max-width:768px) {
+    .title { font-size:1.8em; }
+    .stats-grid { grid-template-columns:repeat(3,1fr); gap:8px; }
+    .services-grid { grid-template-columns:1fr; }
+    .social-buttons { flex-direction:column; align-items:center; }
+    .header { padding:20px; }
+    .container { padding:10px; margin:10px; max-height:95vh; }
+    .stat-value { font-size:1.4em; }
 }
-
-.service-card::after {
-    content: '';
-    position: absolute;
-    top: -50%;
-    left: -50%;
-    width: 200%;
-    height: 200%;
-    background: conic-gradient(
-        from 0deg,
-        transparent,
-        rgba(0,255,0,0.04),
-        transparent,
-        rgba(0,255,255,0.04),
-        transparent
-    );
-    animation: rotate 10s linear infinite;
-    opacity: 0;
-    transition: opacity 0.3s;
-}
-
-.service-card:hover::after {
-    opacity: 1;
-}
-
-.service-icon {
-    font-size: 2em;
-    position: relative;
-    z-index: 2;
-    flex-shrink: 0;
-    width: 48px;
-    height: 48px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background: rgba(0,255,0,0.06);
-    border-radius: 12px;
-    border: 1px solid rgba(0,255,0,0.08);
-}
-
-.service-info {
-    flex: 1;
-    position: relative;
-    z-index: 2;
-}
-
-.service-name {
-    font-size: 1em;
-    font-weight: 700;
-    color: #fff;
-    margin-bottom: 2px;
-    font-family: 'Inter', sans-serif;
-}
-
-.service-desc {
-    font-size: 0.7em;
-    color: #88aa88;
-    font-weight: 400;
-}
-
-.service-arrow {
-    font-size: 1.4em;
-    color: #446644;
-    transition: all 0.3s;
-    position: relative;
-    z-index: 2;
-}
-
-.service-card:hover .service-arrow {
-    color: #00ff00;
-    transform: translateX(5px);
-}
-
-/* ===== SERVICE DETAIL MODAL ===== */
-.modal-overlay {
-    display: none;
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.85);
-    z-index: 999;
-    justify-content: center;
-    align-items: center;
-    backdrop-filter: blur(8px);
-    animation: fadeIn 0.3s ease;
-}
-
-.modal-overlay.active {
-    display: flex;
-}
-
-@keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.9); }
-    to { opacity: 1; transform: scale(1); }
-}
-
-.modal-content {
-    background: linear-gradient(145deg, #0a1a0a, #000);
-    border: 2px solid #00ff00;
-    border-radius: 20px;
-    padding: 35px 40px;
-    max-width: 500px;
-    width: 90%;
-    box-shadow: 0 0 60px rgba(0,255,0,0.2);
-    position: relative;
-    transform: translateZ(50px);
-    animation: modalPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-}
-
-@keyframes modalPop {
-    from { transform: scale(0.8) translateY(30px); opacity: 0; }
-    to { transform: scale(1) translateY(0); opacity: 1; }
-}
-
-.modal-close {
-    position: absolute;
-    top: 15px;
-    right: 20px;
-    font-size: 1.8em;
-    color: #ff4444;
-    cursor: pointer;
-    transition: all 0.3s;
-    background: none;
-    border: none;
-    font-family: 'Inter', sans-serif;
-}
-
-.modal-close:hover {
-    transform: rotate(90deg) scale(1.2);
-    color: #ff0000;
-}
-
-.modal-icon {
-    font-size: 4em;
-    text-align: center;
-    margin-bottom: 10px;
-}
-
-.modal-title {
-    font-size: 1.8em;
-    font-weight: 700;
-    text-align: center;
-    color: #00ff00;
-    margin-bottom: 5px;
-    font-family: 'Orbitron', sans-serif;
-}
-
-.modal-desc {
-    text-align: center;
-    color: #88aa88;
-    margin-bottom: 20px;
-    font-size: 0.95em;
-}
-
-.modal-info {
-    background: rgba(0,255,0,0.05);
-    border-radius: 10px;
-    padding: 15px 20px;
-    border: 1px solid rgba(0,255,0,0.1);
-    margin-bottom: 15px;
-}
-
-.modal-info-item {
-    display: flex;
-    justify-content: space-between;
-    padding: 5px 0;
-    color: #aaa;
-    font-size: 0.85em;
-    border-bottom: 1px solid rgba(0,255,0,0.05);
-}
-
-.modal-info-item:last-child {
-    border-bottom: none;
-}
-
-.modal-info-item span:last-child {
-    color: #00ff00;
-    font-weight: 600;
-}
-
-.modal-command {
-    background: rgba(0,0,0,0.5);
-    border: 1px solid rgba(0,255,0,0.2);
-    border-radius: 8px;
-    padding: 12px 15px;
-    font-family: 'Courier New', monospace;
-    color: #00ff00;
-    font-size: 0.85em;
-    word-break: break-all;
-    margin-bottom: 15px;
-}
-
-.modal-btn {
-    display: block;
-    width: 100%;
-    padding: 12px;
-    background: linear-gradient(135deg, #00ff00, #00cc00);
-    border: none;
-    border-radius: 10px;
-    color: #000;
-    font-weight: 700;
-    font-size: 1em;
-    cursor: pointer;
-    transition: all 0.3s;
-    font-family: 'Inter', sans-serif;
-}
-
-.modal-btn:hover {
-    transform: scale(1.03);
-    box-shadow: 0 0 30px rgba(0,255,0,0.4);
-}
-
-/* ===== FOOTER ===== */
-.footer {
-    text-align: center;
-    padding: 15px;
-    color: #446644;
-    font-size: 0.7em;
-    border-top: 1px solid rgba(0,255,0,0.06);
-    margin-top: 15px;
-    transform: translateZ(10px);
-    font-weight: 400;
-    letter-spacing: 1px;
-}
-
-.footer a {
-    color: #00ff00;
-    text-decoration: none;
-    transition: all 0.3s;
-}
-
-.footer a:hover {
-    color: #ff00ff;
-    text-shadow: 0 0 20px #ff00ff;
-}
-
-/* ===== RESPONSIVE ===== */
-@media (max-width: 768px) {
-    .title { font-size: 1.8em; }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
-    .services-grid { grid-template-columns: 1fr; }
-    .social-buttons { flex-direction: column; align-items: center; }
-    .header { padding: 20px; }
-    .container { padding: 10px; margin: 10px; max-height: 95vh; }
-    .modal-content { padding: 25px 20px; }
-    .stat-value { font-size: 1.8em; }
-}
-
-@media (max-width: 480px) {
-    .title { font-size: 1.4em; letter-spacing: 1px; }
-    .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
-    .stat-value { font-size: 1.5em; }
-    .stat-card { padding: 12px 10px; }
-    .service-card { padding: 12px 14px; }
-    .modal-content { padding: 20px 15px; }
+@media (max-width:480px) {
+    .title { font-size:1.4em; letter-spacing:1px; }
+    .stats-grid { grid-template-columns:1fr 1fr; gap:6px; }
+    .stat-value { font-size:1.2em; }
+    .stat-card { padding:10px 8px; }
+    .service-card { padding:10px 12px; }
 }
 </style>
 </head>
 <body>
 
-<!-- ===== CANVAS BACKGROUNDS ===== -->
 <canvas id="bg-canvas"></canvas>
 <canvas id="matrix-canvas"></canvas>
 <canvas id="laser-canvas"></canvas>
 
-<!-- ===== CONTAINER ===== -->
 <div class="container">
     <div class="header">
         <div class="title">🎮 GARENA CHECKER</div>
@@ -879,15 +413,15 @@ body {
         <div class="subtitle" style="font-size:0.7em;color:#446644;margin-top:5px;">⏱ Uptime: UPTIME_PLACEHOLDER</div>
     </div>
     
-    <!-- ===== STATS ===== -->
     <div class="stats-grid">
         <div class="stat-card stat-hits"><div class="stat-value">HITS_PLACEHOLDER</div><div class="stat-label">✅ Hits</div></div>
         <div class="stat-card stat-error"><div class="stat-value">ERROR_PLACEHOLDER</div><div class="stat-label">⚠️ Errors</div></div>
         <div class="stat-card stat-checked"><div class="stat-value">CHECKED_PLACEHOLDER</div><div class="stat-label">🔄 Checked</div></div>
+        <div class="stat-card stat-total"><div class="stat-value">TOTAL_HITS_PLACEHOLDER</div><div class="stat-label">🏆 Tong Hits</div></div>
+        <div class="stat-card stat-totalchecked"><div class="stat-value">TOTAL_CHECKED_PLACEHOLDER</div><div class="stat-label">📊 Tong Check</div></div>
         <div class="stat-card stat-time"><div class="stat-value">CURRENT_TIME_PLACEHOLDER</div><div class="stat-label">📅 Thoi gian</div></div>
     </div>
     
-    <!-- ===== SERVICES ===== -->
     <div class="section-title">📋 DICH VU HO TRO</div>
     <div class="services-grid">
         SERVICES_HTML_PLACEHOLDER
@@ -899,24 +433,6 @@ body {
     </div>
 </div>
 
-<!-- ===== MODAL ===== -->
-<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content">
-        <button class="modal-close" onclick="closeModal()">✕</button>
-        <div class="modal-icon" id="modalIcon">🎮</div>
-        <div class="modal-title" id="modalTitle">Service</div>
-        <div class="modal-desc" id="modalDesc">Description</div>
-        <div class="modal-info">
-            <div class="modal-info-item"><span>📌 Service ID</span><span id="modalId">-</span></div>
-            <div class="modal-info-item"><span>🔗 API Route</span><span id="modalRoute">-</span></div>
-            <div class="modal-info-item"><span>📝 Parameters</span><span id="modalParams">tk, mk</span></div>
-        </div>
-        <div class="modal-command" id="modalCommand">/check user:pass service</div>
-        <button class="modal-btn" onclick="closeModal()">✅ OK, TOI HIEU</button>
-    </div>
-</div>
-
-<!-- ===== AUDIO ===== -->
 <audio id="bg-audio" loop autoplay>
     <source src="/audio" type="audio/wav">
     <source src="/audio.mp3" type="audio/mpeg">
@@ -924,7 +440,7 @@ body {
 
 <script>
 // ========================================================================
-// 1. 3D BACKGROUND EFFECT
+// 1. 3D BACKGROUND
 // ========================================================================
 const bgCanvas = document.getElementById('bg-canvas');
 const bgCtx = bgCanvas.getContext('2d');
@@ -933,11 +449,8 @@ bgCanvas.height = window.innerHeight;
 
 let particles = [];
 const PARTICLE_COUNT = 120;
-
 class Particle {
-    constructor() {
-        this.reset();
-    }
+    constructor() { this.reset(); }
     reset() {
         this.x = Math.random() * bgCanvas.width;
         this.y = Math.random() * bgCanvas.height;
@@ -964,70 +477,54 @@ class Particle {
         ctx.globalAlpha = 1;
     }
 }
-
-for (let i = 0; i < PARTICLE_COUNT; i++) {
-    particles.push(new Particle());
-}
-
+for (let i = 0; i < PARTICLE_COUNT; i++) { particles.push(new Particle()); }
 function drawBg() {
-    bgCtx.fillStyle = 'rgba(10, 10, 10, 0.3)';
-    bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
-    for (const p of particles) {
-        p.update();
-        p.draw(bgCtx);
-    }
+    bgCtx.fillStyle = 'rgba(10,10,10,0.3)';
+    bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height);
+    for (const p of particles) { p.update(); p.draw(bgCtx); }
     requestAnimationFrame(drawBg);
 }
 drawBg();
 
 // ========================================================================
-// 2. MATRIX EFFECT
+// 2. MATRIX
 // ========================================================================
 const matrixCanvas = document.getElementById('matrix-canvas');
 const matrixCtx = matrixCanvas.getContext('2d');
 matrixCanvas.width = window.innerWidth;
 matrixCanvas.height = window.innerHeight;
-
 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}[]|;:,.<>?~';
 const fontSize = 13;
 const columns = Math.ceil(matrixCanvas.width / fontSize);
 const drops = [];
-for (let i = 0; i < columns; i++) {
-    drops[i] = Math.random() * -100;
-}
-
+for (let i = 0; i < columns; i++) { drops[i] = Math.random() * -100; }
 function drawMatrix() {
-    matrixCtx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-    matrixCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
-    
+    matrixCtx.fillStyle = 'rgba(0,0,0,0.05)';
+    matrixCtx.fillRect(0,0,matrixCanvas.width,matrixCanvas.height);
     for (let i = 0; i < drops.length; i++) {
         const text = chars[Math.floor(Math.random() * chars.length)];
         const bright = Math.random() > 0.92 ? '#ffffff' : '#00ff00';
         matrixCtx.fillStyle = bright;
         matrixCtx.font = fontSize + 'px monospace';
         matrixCtx.fillText(text, i * fontSize, drops[i] * fontSize);
-        
-        if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) {
-            drops[i] = 0;
-        }
+        if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) { drops[i] = 0; }
         drops[i]++;
     }
 }
 setInterval(drawMatrix, 50);
 
 // ========================================================================
-// 3. LASER EFFECT
+// 3. LASER
 // ========================================================================
 const laserCanvas = document.getElementById('laser-canvas');
 const laserCtx = laserCanvas.getContext('2d');
 laserCanvas.width = window.innerWidth;
 laserCanvas.height = window.innerHeight;
-
-const laserColors = ['#00ff00', '#00ffff', '#ff00ff', '#ffff00', '#ff4444', '#44ff44', '#ff8800'];
+const laserColors = ['#00ff00','#00ffff','#ff00ff','#ffff00','#ff4444','#44ff44','#ff8800'];
 let lasers = [];
 
 class LaserBeam {
-    constructor(x, y) {
+    constructor(x,y) {
         this.x = x || Math.random() * laserCanvas.width;
         this.y = y || Math.random() * laserCanvas.height;
         this.tx = Math.random() * laserCanvas.width;
@@ -1052,9 +549,7 @@ class LaserBeam {
         }
         for (let i = this.particles.length - 1; i >= 0; i--) {
             const p = this.particles[i];
-            p.x += p.vx;
-            p.y += p.vy;
-            p.life++;
+            p.x += p.vx; p.y += p.vy; p.life++;
             if (p.life > p.maxLife) this.particles.splice(i, 1);
         }
         if (this.life > this.maxLife) {
@@ -1093,17 +588,10 @@ class LaserBeam {
         ctx.globalAlpha = 1;
     }
 }
-
-function createLaser(x, y) {
-    if (lasers.length < 80) lasers.push(new LaserBeam(x, y));
-}
-
+function createLaser(x,y) { if (lasers.length < 80) lasers.push(new LaserBeam(x,y)); }
 function drawLasers() {
-    laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
-    for (const l of lasers) {
-        l.update();
-        l.draw(laserCtx);
-    }
+    laserCtx.clearRect(0,0,laserCanvas.width,laserCanvas.height);
+    for (const l of lasers) { l.update(); l.draw(laserCtx); }
     if (Math.random() > 0.97) {
         const fx = Math.random() * laserCanvas.width;
         const fy = Math.random() * laserCanvas.height;
@@ -1119,189 +607,57 @@ function drawLasers() {
     }
     requestAnimationFrame(drawLasers);
 }
-
 for (let i = 0; i < 15; i++) createLaser();
 drawLasers();
 
-// Mouse laser
 document.addEventListener('mousemove', function(e) {
-    if (Math.random() > 0.88) {
-        createLaser(e.clientX, e.clientY);
-        if (lasers.length > 80) lasers.shift();
-    }
+    if (Math.random() > 0.88) { createLaser(e.clientX, e.clientY); if (lasers.length > 80) lasers.shift(); }
 });
-
 document.addEventListener('click', function(e) {
-    for (let i = 0; i < 6; i++) {
-        createLaser(e.clientX, e.clientY);
-    }
+    for (let i = 0; i < 6; i++) { createLaser(e.clientX, e.clientY); }
     if (lasers.length > 80) lasers.splice(0, 6);
 });
 
 // ========================================================================
-// 4. AUDIO - FIX: DAM BAO PHAT
+// 4. AUDIO
 // ========================================================================
 const audio = document.getElementById('bg-audio');
-
 function playAudioDirect() {
     audio.volume = 0.25;
     audio.loop = true;
-    const promise = audio.play();
-    if (promise) {
-        promise.then(() => {
-            console.log('🎵 Audio playing successfully!');
-        }).catch((e) => {
-            console.log('Auto-play blocked, using fallback...');
-            document.addEventListener('click', function playOnce() {
-                audio.play().catch(() => {});
-                document.removeEventListener('click', playOnce);
-            }, { once: true });
-            try {
-                const AudioContext = window.AudioContext || window.webkitAudioContext;
-                const ctx = new AudioContext();
-                if (ctx.state === 'suspended') {
-                    ctx.resume().then(() => {
-                        audio.play().catch(() => {});
-                    });
-                }
-            } catch(e) {}
-        });
-    }
+    audio.play().then(() => { console.log('🎵 Audio playing'); }).catch(e => {
+        console.log('Auto-play blocked');
+        document.addEventListener('click', function playOnce() {
+            audio.play().catch(() => {});
+            document.removeEventListener('click', playOnce);
+        }, { once: true });
+    });
 }
-
-audio.addEventListener('error', function() {
-    console.log('Audio error, reloading...');
-    audio.load();
-    setTimeout(playAudioDirect, 500);
-});
-
+audio.addEventListener('error', function() { audio.load(); setTimeout(playAudioDirect, 500); });
 setTimeout(playAudioDirect, 300);
-
-setInterval(() => {
-    if (audio.paused && !audio.ended) {
-        console.log('Audio paused, trying to resume...');
-        audio.play().catch(() => {});
-    }
-}, 5000);
+setInterval(() => { if (audio.paused && !audio.ended) { audio.play().catch(() => {}); } }, 5000);
 
 // ========================================================================
-// 5. STATS UPDATE
+// 5. STATS
 // ========================================================================
 function updateStats() {
-    fetch('/stats').then(r => r.json()).then(d => {
+    fetch('/stats').then(r=>r.json()).then(d=>{
         document.querySelector('.stat-hits .stat-value').textContent = d.stats?.hits || 0;
         document.querySelector('.stat-error .stat-value').textContent = d.stats?.errors || 0;
         document.querySelector('.stat-checked .stat-value').textContent = d.stats?.checked || 0;
+        document.querySelector('.stat-total .stat-value').textContent = d.total_stats?.total_hits || 0;
+        document.querySelector('.stat-totalchecked .stat-value').textContent = d.total_stats?.total_checked || 0;
         document.querySelector('.stat-time .stat-value').textContent = new Date().toLocaleTimeString('vi-VN');
         const badge = document.getElementById('status-badge');
         badge.textContent = d.checking ? '🔴 Dang check' : '🟢 San sang';
         badge.style.background = d.checking ? '#ff9800' : '#4caf50';
-    }).catch(e => console.log('Error:', e));
+    }).catch(e=>console.log(e));
 }
-setInterval(updateStats, 5000);
+setInterval(updateStats, 3000);
 updateStats();
 
-// ========================================================================
-// 6. SERVICE DETAIL MODAL
-// ========================================================================
-const serviceData = {
-    "lienquan": {
-        icon: "🎮",
-        name: "Lien Quan",
-        desc: "Check tai khoan Lien Quan + FC Online",
-        route: "/api/lienquan",
-        params: "tk, mk",
-        command: "/check user:pass lienquan"
-    },
-    "miniworld": {
-        icon: "🌍",
-        name: "Mini World",
-        desc: "Check tai khoan Mini World",
-        route: "/api/miniworld",
-        params: "tk, mk",
-        command: "/check user:pass miniworld"
-    },
-    "blockmango": {
-        icon: "🧱",
-        name: "Blockman Go",
-        desc: "Check tai khoan Blockman Go",
-        route: "/api/blockmango",
-        params: "tk, mk",
-        command: "/check user:pass blockmango"
-    },
-    "deltaforce": {
-        icon: "🔫",
-        name: "Delta Force",
-        desc: "Check tai khoan Delta Force",
-        route: "/api/deltaforce",
-        params: "tk, mk",
-        command: "/check user:pass deltaforce"
-    },
-    "hotmail": {
-        icon: "📧",
-        name: "Hotmail",
-        desc: "Check tai khoan Hotmail",
-        route: "/api/hotmail",
-        params: "tk, mk",
-        command: "/check user:pass hotmail"
-    },
-    "fc": {
-        icon: "⚽",
-        name: "FC Online",
-        desc: "Check tai khoan FC Online",
-        route: "/api/fc",
-        params: "tk, mk",
-        command: "/check user:pass fc"
-    },
-    "fullpack": {
-        icon: "📦",
-        name: "Fullpack",
-        desc: "Check tat ca dich vu",
-        route: "/api/fullpack",
-        params: "tk, mk",
-        command: "/check user:pass fullpack"
-    }
-};
-
-function showServiceDetail(key) {
-    const data = serviceData[key];
-    if (!data) return;
-    
-    document.getElementById('modalIcon').textContent = data.icon;
-    document.getElementById('modalTitle').textContent = data.name;
-    document.getElementById('modalDesc').textContent = data.desc;
-    document.getElementById('modalId').textContent = key;
-    document.getElementById('modalRoute').textContent = data.route;
-    document.getElementById('modalParams').textContent = data.params;
-    document.getElementById('modalCommand').textContent = data.command;
-    
-    document.getElementById('modalOverlay').classList.add('active');
-}
-
-function closeModal() {
-    document.getElementById('modalOverlay').classList.remove('active');
-}
-
-// ESC to close
-document.addEventListener('keydown', function(e) {
-    if (e.key === 'Escape') closeModal();
-});
-
-// ========================================================================
-// 7. RESIZE
-// ========================================================================
-window.addEventListener('resize', () => {
-    bgCanvas.width = window.innerWidth;
-    bgCanvas.height = window.innerHeight;
-    matrixCanvas.width = window.innerWidth;
-    matrixCanvas.height = window.innerHeight;
-    laserCanvas.width = window.innerWidth;
-    laserCanvas.height = window.innerHeight;
-});
-
 console.log('🔥 GARENA CHECKER HACKER EDITION LOADED!');
-console.log('💀 3D Effects - Laser - Matrix - Auto Audio');
-console.log('📱 Click service card for details!');
+console.log('📊 Stats are being saved to check_stats.json');
 </script>
 </body>
 </html>"""
@@ -1313,6 +669,8 @@ console.log('📱 Click service card for details!');
         html = html.replace('HITS_PLACEHOLDER', str(hits_count))
         html = html.replace('ERROR_PLACEHOLDER', str(error_count))
         html = html.replace('CHECKED_PLACEHOLDER', str(stats.get('checked', 0)))
+        html = html.replace('TOTAL_HITS_PLACEHOLDER', str(total_hits))
+        html = html.replace('TOTAL_CHECKED_PLACEHOLDER', str(total_checked))
         html = html.replace('CURRENT_TIME_PLACEHOLDER', current_time)
         html = html.replace('SERVICES_HTML_PLACEHOLDER', services_html)
         
@@ -1341,7 +699,7 @@ def start_render_server():
         print(f"[*] Audio: http://0.0.0.0:{port}/audio")
         print(f"[*] HIEU UNG 3D + HACKER DEP")
         print(f"[*] AM THANH TU DONG PHAT")
-        print(f"[*] UI CAI TIEN VOI ICON THUC TE")
+        print(f"[*] LUU THONG KE VAO {STATS_FILE}")
         server.serve_forever()
     except Exception as e:
         print(f"[!] Loi web server: {e}")
@@ -1770,7 +1128,7 @@ def save_loc_file(accounts):
             for user, pwd in accounts:
                 f.write(f"{user}:{pwd}\n")
 
-# KHONG LUU KET QUA
+# KHONG LUU KET QUA (chi luu thong ke)
 def save_result(username, password, status, service=""):
     pass
 
@@ -1838,6 +1196,7 @@ def check_account_api(username, password, service, use_delay=True):
                     if isinstance(result_data, dict):
                         is_hit = False
                         
+                        # Kiem tra status
                         status_val = result_data.get("status")
                         if status_val is not None:
                             if status_val in [True, "true", 1, "1", "True", "TRUE", "success", "Success", "SUCCESS", "HIT", "hit"]:
@@ -1845,6 +1204,7 @@ def check_account_api(username, password, service, use_delay=True):
                             elif status_val in [False, "false", 0, "0", "False", "FALSE", "fail", "Fail", "FAIL", "dead", "Dead", "DEAD"]:
                                 is_hit = False
                         
+                        # Kiem tra success
                         success_val = result_data.get("success")
                         if not is_hit and success_val is not None:
                             if success_val in [True, "true", 1, "1", "True", "TRUE"]:
@@ -1852,6 +1212,7 @@ def check_account_api(username, password, service, use_delay=True):
                             elif success_val in [False, "false", 0, "0", "False", "FALSE"]:
                                 is_hit = False
                         
+                        # Kiem tra result
                         result_val = result_data.get("result")
                         if result_val is not None:
                             result_str = str(result_val).lower()
@@ -1860,20 +1221,23 @@ def check_account_api(username, password, service, use_delay=True):
                             elif result_str in ["dead", "false", "fail", "invalid", "0", "die", "error"]:
                                 is_hit = False
                         
+                        # Kiem tra message
                         message_val = result_data.get("message", "")
                         if message_val:
                             msg_lower = str(message_val).lower()
-                            if any(word in msg_lower for word in ["thanh cong", "thanh cong", "success", "valid", "hit", "dung", "live", "ok"]):
+                            if any(word in msg_lower for word in ["thanh cong", "success", "valid", "hit", "live", "ok"]):
                                 is_hit = True
-                            elif any(word in msg_lower for word in ["that bai", "that bai", "fail", "invalid", "dead", "sai", "khong dung", "die", "error"]):
+                            elif any(word in msg_lower for word in ["that bai", "fail", "invalid", "dead", "error"]):
                                 is_hit = False
                         
+                        # Kiem tra data
                         data_val = result_data.get("data")
                         if data_val is not None:
                             if isinstance(data_val, (dict, list, str)) and data_val:
                                 is_hit = True
                         
-                        info_fields = ["uid", "id", "name", "nickname", "account", "info", "user", "player", "level", "rank", "email", "phone", "sdt"]
+                        # Kiem tra cac truong thong tin
+                        info_fields = ["uid", "id", "name", "nickname", "account", "info", "user", "player", "level", "rank", "email", "phone", "sdt", "shells", "aov_name", "aov_level", "aov_rank", "aov_total_skins", "aov_total_champs", "fc_name", "fc_ovr"]
                         for field in info_fields:
                             if field in result_data and result_data[field] is not None and result_data[field] != "":
                                 is_hit = True
@@ -1953,143 +1317,74 @@ def format_hit_info(username, password, service, result_data):
     msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
     
     if isinstance(result_data, dict):
-        field_map = {
-            "uid": ("👤 UID", "uid"),
-            "name": ("👤 Name", "name"),
-            "nickname": ("👤 Nickname", "nickname"),
-            "region": ("🌐 Region", "region"),
-            "shells": ("💰 Shells", "shells"),
-            "so": ("💲 So", "so"),
-            "nap_so": ("💰 Nap so", "nap_so"),
-            "email_verified": ("📩 EMAIL", "email_verified"),
-            "email": ("📩 EMAIL", "email"),
-            "mobile_bound": ("📱 SDT", "mobile_bound"),
-            "phone": ("📱 SDT", "phone"),
-            "sdt": ("📱 SDT", "sdt"),
-            "fb": ("🔗 FB", "fb"),
-            "fb_linked": ("🔗 FB", "fb_linked"),
-            "password_set": ("🛡 PASS", "password_set"),
-            "account_secured": ("🛡 Account Secured", "account_secured"),
-            "banned": ("🚫 BAND", "banned"),
-            "ban": ("🚫 BAND", "ban"),
-            "aov_banned": ("🚫 BAND", "aov_banned"),
-            "ban_until": ("🚫 BAND Den", "ban_until"),
-            "ban_expires": ("🚫 BAND Den", "ban_expires"),
-            "last_login": ("⏰ Login cuoi", "last_login"),
-            "garena_created": ("📅 Tao GR", "garena_created"),
-            "created_at": ("📅 Tao GR", "created_at"),
-            "server": ("🖥 Server", "server"),
-            "aov_name": ("🔥 NAME", "aov_name"),
-            "aov_rank": ("👑 RANK", "aov_rank"),
-            "aov_level": ("✨ LEVEL", "aov_level"),
-            "aov_total_skins": ("💎 SKIN", "aov_total_skins"),
-            "aov_total_champs": ("💪 HERO", "aov_total_champs"),
-            "aov_total_heroes": ("💪 HERO", "aov_total_heroes"),
-            "aov_total_relationships": ("⚡️ QH", "aov_total_relationships"),
-            "aov_ss": ("✨ SS", "aov_ss"),
-            "aov_sss": ("🔥 SSS", "aov_sss"),
-            "aov_anime": ("🔥 Anime", "aov_anime"),
-            "aov_ss_list": ("✨ SS List", "aov_ss_list"),
-            "aov_sss_list": ("🔥 SSS List", "aov_sss_list"),
-            "aov_anime_list": ("🔥 Anime List", "aov_anime_list"),
-            "aov_other": ("🎲 Other", "aov_other"),
-            "aov_other_list": ("🎲 Other List", "aov_other_list"),
-            "cccd": ("📄 CCCD", "cccd"),
-            "authen": ("🛡 Authen", "authen"),
-            "tinh_trang": ("📋 Tinh Trang", "tinh_trang"),
-            "status_account": ("📋 Tinh Trang", "status_account"),
-            "fc_name": ("🔥 FC Name", "fc_name"),
-            "fc_uid": ("🆔 FC UID", "fc_uid"),
-            "fc_ovr": ("📊 OVR", "fc_ovr"),
-            "fc_level": ("✨ FC Level", "fc_level"),
-            "fc_rank": ("👑 FC Rank", "fc_rank"),
-            "last_session_ip": ("🌐 IP", "last_session_ip"),
-            "last_session_country": ("🌍 Country", "last_session_country"),
-            "ngay_tao_tk": ("📅 Ngay tao TK", "ngay_tao_tk"),
-            "ban_reason": ("🚫 Ly do Band", "ban_reason")
-        }
+        # Cac truong hien thi
+        display_fields = [
+            ("👤 UID", "uid"),
+            ("👤 Name", "name"),
+            ("👤 Nickname", "nickname"),
+            ("🌐 Region", "region"),
+            ("💰 Shells", "shells"),
+            ("💲 So", "so"),
+            ("📩 EMAIL", "email"),
+            ("📱 SDT", "phone"),
+            ("🔗 FB", "fb"),
+            ("🛡 PASS", "password_set"),
+            ("🚫 BAND", "banned"),
+            ("⏰ Login cuoi", "last_login"),
+            ("📅 Tao GR", "garena_created"),
+            ("🖥 Server", "server"),
+            ("🔥 NAME", "aov_name"),
+            ("👑 RANK", "aov_rank"),
+            ("✨ LEVEL", "aov_level"),
+            ("💎 SKIN", "aov_total_skins"),
+            ("💪 HERO", "aov_total_champs"),
+            ("⚡️ QH", "aov_total_relationships"),
+            ("✨ SS", "aov_ss"),
+            ("🔥 SSS", "aov_sss"),
+            ("🔥 Anime", "aov_anime"),
+            ("🔥 FC Name", "fc_name"),
+            ("🆔 FC UID", "fc_uid"),
+            ("📊 OVR", "fc_ovr"),
+            ("✨ FC Level", "fc_level"),
+            ("👑 FC Rank", "fc_rank"),
+            ("🌐 IP", "last_session_ip"),
+            ("🌍 Country", "last_session_country"),
+            ("📅 Ngay tao TK", "ngay_tao_tk"),
+            ("🚫 Ly do Band", "ban_reason")
+        ]
         
         info_lines = []
         
-        for key, (label, field) in field_map.items():
+        for label, field in display_fields:
             if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
                 value = result_data[field]
                 
                 if isinstance(value, (int, float)) and value == 0:
                     continue
-                if isinstance(value, str) and value in ["0", "00", "000"]:
+                if isinstance(value, str) and value in ["0", "00", "000", "False", "false"]:
                     continue
+                if isinstance(value, bool):
+                    value = "YES" if value else "NO"
                 
                 if isinstance(value, str):
                     value = fix_encoding(value)
                 
-                if field in ["email_verified", "mobile_bound", "fb_linked", "password_set", "account_secured"]:
-                    value = format_value(value)
-                
-                if field == "aov_banned":
-                    if isinstance(value, str) and value.upper() == "NO":
-                        value = "NO"
-                    elif isinstance(value, bool):
-                        value = "YES" if value else "NO"
-                
-                if isinstance(value, list):
-                    if value:
-                        value = "[" + ", ".join([fix_encoding(str(item)) for item in value]) + "]"
-                    else:
-                        continue
-                
-                if isinstance(value, tuple):
-                    if value:
-                        value = "[" + ", ".join([fix_encoding(str(item)) for item in value]) + "]"
-                    else:
-                        continue
-                
-                if field in ["banned", "ban", "aov_banned"]:
-                    if isinstance(value, str) and value.upper() == "NO":
-                        value = "NO"
-                    elif isinstance(value, bool):
-                        value = "YES" if value else "NO"
-                    elif isinstance(value, str) and value.upper() == "YES":
-                        value = "YES"
-                
-                if field in ["ban_until", "ban_expires"]:
-                    if isinstance(value, str):
-                        value = fix_encoding(value)
-                        value = f"[{value}]"
-                
                 info_lines.append(f"{label}: {value}")
         
-        skip_fields = set(field_map.keys())
-        skip_fields.update(["result", "_is_hit", "_raw_response", "_error", "status", "success", "tk", "mk", "data", "message", "username"])
+        # Hien thi danh sach (SS, SSS, Anime)
+        list_fields = [
+            ("✨ SS List", "aov_ss_list"),
+            ("🔥 SSS List", "aov_sss_list"),
+            ("🔥 Anime List", "aov_anime_list"),
+            ("🎲 Other List", "aov_other_list")
+        ]
         
-        for key, value in result_data.items():
-            if key not in skip_fields and value is not None and value != "" and value != {} and value != []:
-                if isinstance(value, (int, float)) and value == 0:
-                    continue
-                if isinstance(value, str) and value in ["0", "00", "000"]:
-                    continue
-                
-                if isinstance(value, (str, int, float)):
-                    label = key.replace("_", " ").title()
-                    value = format_value(value)
-                    if isinstance(value, str):
-                        value = fix_encoding(value)
-                    info_lines.append(f"▫️ {label}: {value}")
-                elif isinstance(value, list) and value:
-                    label = key.replace("_", " ").title()
-                    list_value = "[" + ", ".join([fix_encoding(str(item)) for item in value]) + "]"
-                    info_lines.append(f"▫️ {label}: {list_value}")
-                elif isinstance(value, dict):
-                    for sub_key, sub_value in value.items():
-                        if sub_value is not None and sub_value != "" and sub_value != {} and sub_value != []:
-                            if isinstance(sub_value, (str, int, float)):
-                                if isinstance(sub_value, (int, float)) and sub_value == 0:
-                                    continue
-                                sub_label = sub_key.replace("_", " ").title()
-                                sub_value = format_value(sub_value)
-                                if isinstance(sub_value, str):
-                                    sub_value = fix_encoding(sub_value)
-                                info_lines.append(f"▫️ {sub_label}: {sub_value}")
+        for label, field in list_fields:
+            if field in result_data and result_data[field]:
+                value = result_data[field]
+                if isinstance(value, list) and value:
+                    value = [fix_encoding(str(item)) for item in value]
+                    info_lines.append(f"{label}: {', '.join(value)}")
         
         if info_lines:
             msg += "\n".join(info_lines)
@@ -2107,10 +1402,13 @@ def check_single(chat_id, username, password, service="lienquan"):
     if result_type == "hit":
         hit_msg = format_hit_info(username, password, service, result)
         safe_send_message(chat_id, hit_msg)
+        update_stats(hit_count=1)
     elif result_type == "dead":
         safe_send_message(chat_id, f"❌ DEAD - {service_desc}\n🔑 {username}:{password}")
+        update_stats(dead_count=1)
     else:
         safe_send_message(chat_id, f"⚠️ ERROR - {service_desc}\n🔑 {username}:{password}")
+        update_stats(error_count=1)
 
 def check_batch(chat_id, accounts, service):
     global checking, stats
@@ -2153,6 +1451,9 @@ def check_batch(chat_id, accounts, service):
     total_batches = len(batches)
     batch_num = 0
     
+    # Bien luu ket qua tong hop
+    all_results = []
+    
     def process_single(user, pwd):
         if stop_event.is_set():
             return
@@ -2161,6 +1462,14 @@ def check_batch(chat_id, accounts, service):
         
         result = check_account_api(user, pwd, service, use_delay=False)
         result_type = result.get("result", "unknown")
+        
+        # Luu ket qua
+        all_results.append({
+            "user": user,
+            "pwd": pwd,
+            "status": result_type,
+            "data": result
+        })
         
         with stats_lock:
             stats["checked"] += 1
@@ -2215,14 +1524,47 @@ def check_batch(chat_id, accounts, service):
     checking = False
     elapsed = time.time() - stats["start_time"]
     
-    safe_send_message(chat_id, f"""
+    # Cap nhat thong ke tong
+    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"])
+    
+    # Gui tong ket
+    summary = f"""
 ✅ <b>CHECK HOAN TAT!</b>
 📊 Tong: <code>{stats['total']}</code>
 🎯 HIT: <code>{stats['hits']}</code>
 ❌ DEAD: <code>{stats['dead']}</code>
 ⚠️ ERROR: <code>{stats['errors']}</code>
 ⏱ Thoi gian: <code>{elapsed:.1f}s</code>
-""")
+⚡ Speed: <code>{stats['checked']/elapsed:.1f}</code> acc/s
+"""
+    
+    # Them danh sach hit
+    hits_list = [r for r in all_results if r["status"] == "hit"]
+    if hits_list:
+        summary += f"\n📌 <b>HIT LIST ({len(hits_list)}):</b>\n"
+        for r in hits_list[:20]:  # Gioi han 20
+            summary += f"✅ <code>{r['user']}:{r['pwd']}</code>\n"
+        if len(hits_list) > 20:
+            summary += f"... va {len(hits_list) - 20} hits khac"
+    
+    # Them danh sach dead
+    dead_list = [r for r in all_results if r["status"] == "dead"]
+    if dead_list:
+        summary += f"\n❌ <b>DEAD LIST ({len(dead_list)}):</b>\n"
+        for r in dead_list[:10]:  # Gioi han 10
+            summary += f"❌ <code>{r['user']}:{r['pwd']}</code>\n"
+        if len(dead_list) > 10:
+            summary += f"... va {len(dead_list) - 10} dead khac"
+    
+    safe_send_message(chat_id, summary)
+    
+    # Gui file thong ke neu co hits
+    if stats["hits"] > 0:
+        try:
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                bot.send_document(chat_id, f, caption=f"📊 check_stats.json - {stats['hits']} hits")
+        except:
+            pass
 
 def check_all_services(chat_id, accounts):
     global checking
@@ -2256,6 +1598,8 @@ def check_all_services(chat_id, accounts):
         "start_time": time.time()
     }
     
+    all_results = []
+    
     def process_all(user, pwd, service):
         if stop_event.is_set():
             return
@@ -2264,6 +1608,13 @@ def check_all_services(chat_id, accounts):
         
         result = check_account_api(user, pwd, service, use_delay=False)
         result_type = result.get("result", "unknown")
+        
+        all_results.append({
+            "user": user,
+            "pwd": pwd,
+            "service": service,
+            "status": result_type
+        })
         
         with stats_lock:
             stats_all["checked"] += 1
@@ -2326,13 +1677,28 @@ def check_all_services(chat_id, accounts):
     checking = False
     elapsed = time.time() - stats_all["start_time"]
     
-    safe_send_message(chat_id, f"""
+    # Cap nhat thong ke tong
+    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"])
+    
+    summary = f"""
 ✅ CHECK ALL HOAN TAT!
 🎯 Hits: {stats_all['hits']}
 ❌ Dead: {stats_all['dead']}
 ⚠️ Errors: {stats_all['errors']}
 ⏱ Time: {elapsed:.1f}s
-""")
+⚡ Speed: {stats_all['checked']/elapsed:.1f} acc/s
+"""
+    
+    # Hits list
+    hits_list = [r for r in all_results if r["status"] == "hit"]
+    if hits_list:
+        summary += f"\n📌 HIT LIST ({len(hits_list)}):\n"
+        for r in hits_list[:20]:
+            summary += f"✅ {r['user']}:{r['pwd']} ({r['service']})\n"
+        if len(hits_list) > 20:
+            summary += f"... va {len(hits_list) - 20} hits khac"
+    
+    safe_send_message(chat_id, summary)
 
 # ========== LENH ==========
 @bot.message_handler(commands=['upaudio'])
@@ -2403,23 +1769,45 @@ def cmd_delaudio(message):
     
     safe_send_message(message.chat.id, "✅ Da xoa audio custom!")
 
+@bot.message_handler(commands=['stats'])
+def cmd_stats(message):
+    """Lenh xem thong ke tong"""
+    if not check_membership(message):
+        return
+    
+    stats_data = load_stats()
+    msg = f"""
+📊 <b>THONG KE TONG</b>
+━━━━━━━━━━━━━━━━━━━━━━
+📦 Tong acc da check: <code>{stats_data.get('total_checked', 0)}</code>
+✅ Tong hits: <code>{stats_data.get('total_hits', 0)}</code>
+❌ Tong dead: <code>{stats_data.get('total_dead', 0)}</code>
+⚠️ Tong errors: <code>{stats_data.get('total_errors', 0)}</code>
+⏰ Lan check cuoi: <code>{stats_data.get('last_check', 'Chua co')}</code>
+"""
+    safe_send_message(message.chat.id, msg)
+
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
     if not check_membership(message):
         return
     
     safe_send_message(message.chat.id, f"""
-<b>GARENA CHECKER BOT - HACKER EDITION</b>
+🤖 <b>GARENA CHECKER BOT V6.1 - HACKER EDITION</b>
 👤 Admin: @baohuyno1
-
+🎵 TikTok: @baohuy1109
 
 📌 <b>LENH:</b>
 /check user:pass - Check 1 acc
 /checkmulti user1:pass1,user2:pass2 - Check nhieu
 /checkall - Check tat ca
 /services - Danh sach service
+/stats - Xem thong ke tong
 /stop - Dung check
 
+⚠️ <b>KHONG LUU ACCOUNT!</b>
+🔊 AM THANH TU DONG PHAT TREN WEB!
+📊 LUU THONG KE VAO check_stats.json
 """)
 
 @bot.message_handler(commands=['check'])
@@ -2629,8 +2017,8 @@ def main():
     print("    ===== HIEU UNG 3D + HACKER DEP ===== ")
     print("    ===== AM THANH TU DONG PHAT ===== ")
     print("    ===== KHONG LUU ACCOUNT ===== ")
-    print("    ===== DA BO /hits VA /report ===== ")
-    print("    ===== UI CAI TIEN VOI ICON THUC TE ===== ")
+    print("    ===== LUU THONG KE VAO check_stats.json ===== ")
+    print("    ===== CAI TIEN TRA KET QUA CHECK NHIEU ===== ")
     print("=" * 60)
     
     while True:
