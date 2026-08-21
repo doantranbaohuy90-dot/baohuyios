@@ -1,11 +1,11 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - FIX AUDIO + BO /HITS & /REPORT
+#    GARENA CHECKER BOT V6.1 - UI CAI TIEN + ICON THUC TE
 # ========================================================================
-#    - DA BO LENH /hits VA /report
-#    - FIX AM THANH: SU DUNG WEB AUDIO API + FALLBACK
-#    - AM THANH TU DONG PHAT NGAY KHI VAO TRANG
-#    - HIEU UNG 3D + HACKER DEP
-#    - KHONG LUU ACCOUNT
+#    - Cai tien giao dien web voi icon that cua tung app
+#    - Them nut chi tiet cho tung dich vu trong /services
+#    - Hieu ung 3D + hacker dep
+#    - Am thanh tu dong phat
+#    - Khong luu account
 # ========================================================================
 
 import subprocess
@@ -110,16 +110,14 @@ class RenderHandler(BaseHTTPRequestHandler):
         return self.generate_default_audio()
     
     def generate_default_audio(self):
-        """Tao am thanh default - FIX: am thanh ro rang, phat duoc"""
         try:
             sample_rate = 44100
-            duration = 30.0  # Am thanh dai de nghe ro
+            duration = 30.0
             num_samples = int(sample_rate * duration)
             
             audio_buffer = bytearray()
             for i in range(num_samples):
                 t = i / sample_rate
-                # Tao nhieu tan so khac nhau de nghe ro
                 value = int(32767 * 0.3 * (
                     math.sin(2 * math.pi * 440 * t) * 0.4 +
                     math.sin(2 * math.pi * 554 * t) * 0.3 +
@@ -166,13 +164,17 @@ class RenderHandler(BaseHTTPRequestHandler):
         
         services_html = ""
         for key, value in SERVICE_ROUTES.items():
+            # Icon that cho tung app
+            icon = value.get('icon', '📱')
+            desc = value.get('desc', key)
             services_html += f"""
-            <div class="service-card" data-service="{key}">
-                <div class="service-icon">{value['icon']}</div>
+            <div class="service-card" data-service="{key}" onclick="showServiceDetail('{key}')">
+                <div class="service-icon">{icon}</div>
                 <div class="service-info">
                     <div class="service-name">{key}</div>
-                    <div class="service-desc">{value['desc']}</div>
+                    <div class="service-desc">{desc}</div>
                 </div>
+                <div class="service-arrow">›</div>
             </div>"""
         
         html_template = """<!DOCTYPE html>
@@ -182,12 +184,12 @@ class RenderHandler(BaseHTTPRequestHandler):
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GARENA CHECKER - HACKER EDITION</title>
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;600;700&display=swap');
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
 body {
-    font-family: 'Orbitron', 'Courier New', monospace;
+    font-family: 'Inter', 'Orbitron', 'Courier New', sans-serif;
     background: #0a0a0a;
     min-height: 100vh;
     color: #00ff00;
@@ -203,7 +205,7 @@ body {
     width: 100%;
     height: 100%;
     z-index: 0;
-    opacity: 0.3;
+    opacity: 0.25;
 }
 
 #matrix-canvas {
@@ -213,7 +215,7 @@ body {
     width: 100%;
     height: 100%;
     z-index: 0;
-    opacity: 0.15;
+    opacity: 0.12;
 }
 
 #laser-canvas {
@@ -226,39 +228,52 @@ body {
     pointer-events: none;
 }
 
-/* ===== CONTAINER 3D ===== */
+/* ===== CONTAINER ===== */
 .container {
     position: relative;
     z-index: 2;
-    max-width: 1000px;
-    margin: 20px auto;
-    padding: 30px;
+    max-width: 1100px;
+    margin: 15px auto;
+    padding: 20px;
     perspective: 1200px;
+    max-height: 98vh;
+    overflow-y: auto;
 }
 
-/* ===== HEADER 3D ===== */
+.container::-webkit-scrollbar {
+    width: 4px;
+}
+.container::-webkit-scrollbar-track {
+    background: rgba(0,255,0,0.05);
+}
+.container::-webkit-scrollbar-thumb {
+    background: #00ff00;
+    border-radius: 10px;
+}
+
+/* ===== HEADER ===== */
 .header {
     text-align: center;
-    padding: 40px 30px;
+    padding: 30px 25px;
     background: rgba(0, 0, 0, 0.85);
     border-radius: 20px;
     border: 2px solid #00ff00;
-    box-shadow: 0 0 50px rgba(0,255,0,0.2), inset 0 0 50px rgba(0,255,0,0.05);
+    box-shadow: 0 0 50px rgba(0,255,0,0.15), inset 0 0 50px rgba(0,255,0,0.03);
     position: relative;
     overflow: hidden;
-    transform: rotateX(2deg) rotateY(2deg);
+    transform: rotateX(1deg) rotateY(1deg);
     transition: all 0.5s ease;
     animation: float3d 6s ease-in-out infinite;
 }
 
 .header:hover {
-    transform: rotateX(0deg) rotateY(0deg) scale(1.02);
-    box-shadow: 0 0 80px rgba(0,255,0,0.4), inset 0 0 80px rgba(0,255,0,0.1);
+    transform: rotateX(0deg) rotateY(0deg) scale(1.01);
+    box-shadow: 0 0 80px rgba(0,255,0,0.3), inset 0 0 80px rgba(0,255,0,0.05);
 }
 
 @keyframes float3d {
-    0%, 100% { transform: rotateX(2deg) rotateY(2deg); }
-    50% { transform: rotateX(-2deg) rotateY(-2deg); }
+    0%, 100% { transform: rotateX(1deg) rotateY(1deg); }
+    50% { transform: rotateX(-1deg) rotateY(-1deg); }
 }
 
 .header::before {
@@ -271,11 +286,11 @@ body {
     background: conic-gradient(
         from 0deg,
         transparent,
-        rgba(0,255,0,0.05),
+        rgba(0,255,0,0.04),
         transparent,
-        rgba(0,255,255,0.05),
+        rgba(0,255,255,0.04),
         transparent,
-        rgba(255,0,255,0.05),
+        rgba(255,0,255,0.04),
         transparent
     );
     animation: rotate 15s linear infinite;
@@ -297,16 +312,16 @@ body {
         0deg,
         transparent,
         transparent 2px,
-        rgba(0,255,0,0.03) 2px,
-        rgba(0,255,0,0.03) 4px
+        rgba(0,255,0,0.02) 2px,
+        rgba(0,255,0,0.02) 4px
     );
     pointer-events: none;
 }
 
-/* ===== GLITCH TEXT 3D ===== */
 .title {
-    font-size: 3.5em;
+    font-size: 2.8em;
     font-weight: 900;
+    font-family: 'Orbitron', sans-serif;
     color: #00ff00;
     text-shadow: 
         0 0 20px rgba(0,255,0,0.8),
@@ -318,6 +333,7 @@ body {
     position: relative;
     z-index: 2;
     transform: translateZ(50px);
+    letter-spacing: 2px;
 }
 
 @keyframes glitch3d {
@@ -326,11 +342,11 @@ body {
         text-shadow: 0 0 20px rgba(0,255,0,0.8), 3px 3px 0 #ff00ff, -3px -3px 0 #00ffff;
     }
     20% { 
-        transform: translateZ(50px) skew(2deg);
+        transform: translateZ(50px) skew(1.5deg);
         text-shadow: -3px 0 20px #ff0000, 3px 0 20px #00ffff, 0 0 40px #00ff00;
     }
     40% { 
-        transform: translateZ(50px) skew(-2deg);
+        transform: translateZ(50px) skew(-1.5deg);
         text-shadow: 3px 0 20px #ff00ff, -3px 0 20px #ffff00, 0 0 40px #00ff00;
     }
     60% { 
@@ -349,12 +365,14 @@ body {
 }
 
 .subtitle {
-    font-size: 1.2em;
+    font-size: 1em;
     color: #88ff88;
-    text-shadow: 0 0 20px rgba(0,255,0,0.3);
+    text-shadow: 0 0 20px rgba(0,255,0,0.2);
     animation: flicker 2s infinite;
     position: relative;
     z-index: 2;
+    font-weight: 400;
+    letter-spacing: 3px;
 }
 
 @keyframes flicker {
@@ -366,25 +384,26 @@ body {
     97% { opacity: 1; }
 }
 
-/* ===== 3D SOCIAL BUTTONS ===== */
+/* ===== SOCIAL BUTTONS ===== */
 .social-buttons {
     display: flex;
     justify-content: center;
-    gap: 20px;
-    margin-top: 20px;
+    gap: 15px;
+    margin-top: 15px;
     position: relative;
     z-index: 2;
     transform: translateZ(30px);
+    flex-wrap: wrap;
 }
 
 .social-btn {
     display: inline-flex;
     align-items: center;
-    gap: 10px;
-    padding: 12px 25px;
+    gap: 8px;
+    padding: 10px 22px;
     border-radius: 50px;
-    font-weight: bold;
-    font-size: 1em;
+    font-weight: 700;
+    font-size: 0.85em;
     color: white;
     text-decoration: none;
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
@@ -392,108 +411,111 @@ body {
     overflow: hidden;
     border: none;
     cursor: pointer;
-    transform: rotateX(5deg) rotateY(5deg);
+    transform: rotateX(3deg) rotateY(3deg);
+    font-family: 'Inter', sans-serif;
 }
 
 .social-btn:hover {
-    transform: rotateX(0deg) rotateY(0deg) scale(1.1) translateZ(20px);
-    box-shadow: 0 20px 60px rgba(0,255,0,0.3);
+    transform: rotateX(0deg) rotateY(0deg) scale(1.08) translateZ(20px);
+    box-shadow: 0 20px 60px rgba(0,255,0,0.25);
 }
 
 .social-btn.tiktok {
     background: linear-gradient(135deg, #00f2ea, #ff0050);
-    box-shadow: 0 0 30px rgba(255,0,80,0.3);
+    box-shadow: 0 0 30px rgba(255,0,80,0.25);
 }
 
 .social-btn.telegram {
     background: linear-gradient(135deg, #0088cc, #004488);
-    box-shadow: 0 0 30px rgba(0,136,204,0.3);
+    box-shadow: 0 0 30px rgba(0,136,204,0.25);
 }
 
-/* ===== STATUS BADGE 3D ===== */
+/* ===== STATUS BADGE ===== */
 .status-badge {
     display: inline-block;
-    padding: 12px 30px;
+    padding: 10px 25px;
     border-radius: 50px;
-    font-weight: bold;
-    font-size: 1.1em;
-    margin-top: 15px;
+    font-weight: 700;
+    font-size: 1em;
+    margin-top: 12px;
     background: BOT_COLOR;
     color: white;
-    box-shadow: 0 0 30px rgba(0,255,0,0.5);
+    box-shadow: 0 0 30px rgba(0,255,0,0.4);
     animation: pulse3d 2s infinite;
     position: relative;
     z-index: 2;
     transform: translateZ(40px);
+    font-family: 'Inter', sans-serif;
 }
 
 @keyframes pulse3d {
-    0%, 100% { transform: translateZ(40px) scale(1); box-shadow: 0 0 30px rgba(0,255,0,0.5); }
-    50% { transform: translateZ(60px) scale(1.05); box-shadow: 0 0 60px rgba(0,255,0,0.8); }
+    0%, 100% { transform: translateZ(40px) scale(1); box-shadow: 0 0 30px rgba(0,255,0,0.4); }
+    50% { transform: translateZ(55px) scale(1.03); box-shadow: 0 0 50px rgba(0,255,0,0.7); }
 }
 
 /* ===== AUDIO INDICATOR ===== */
 .audio-indicator {
     display: inline-block;
-    padding: 8px 20px;
+    padding: 6px 16px;
     border-radius: 50px;
-    font-size: 0.9em;
-    margin-top: 10px;
-    background: rgba(0,255,0,0.15);
+    font-size: 0.8em;
+    margin-top: 8px;
+    background: rgba(0,255,0,0.1);
     border: 1px solid #00ff00;
     color: #00ff00;
     position: relative;
     z-index: 2;
     animation: audioPulse 1.5s infinite;
+    font-family: 'Inter', sans-serif;
 }
 
 .audio-indicator .dot {
     display: inline-block;
-    width: 10px;
-    height: 10px;
+    width: 8px;
+    height: 8px;
     background: #00ff00;
     border-radius: 50%;
-    margin-right: 10px;
+    margin-right: 8px;
     animation: dotPulse 1s infinite;
 }
 
 @keyframes audioPulse {
-    0%, 100% { box-shadow: 0 0 20px rgba(0,255,0,0.2); }
-    50% { box-shadow: 0 0 40px rgba(0,255,0,0.5); }
+    0%, 100% { box-shadow: 0 0 15px rgba(0,255,0,0.1); }
+    50% { box-shadow: 0 0 30px rgba(0,255,0,0.3); }
 }
 
 @keyframes dotPulse {
     0%, 100% { transform: scale(1); opacity: 1; }
-    50% { transform: scale(1.5); opacity: 0.5; }
+    50% { transform: scale(1.6); opacity: 0.5; }
 }
 
-/* ===== STATS GRID 3D ===== */
+/* ===== STATS GRID ===== */
 .stats-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
-    gap: 20px;
-    margin: 30px 0;
+    gap: 15px;
+    margin: 20px 0;
     transform: translateZ(20px);
 }
 
 .stat-card {
-    background: linear-gradient(145deg, rgba(0,255,0,0.05), rgba(0,0,0,0.8));
-    border-radius: 15px;
-    padding: 25px 20px;
+    background: linear-gradient(145deg, rgba(0,255,0,0.04), rgba(0,0,0,0.8));
+    border-radius: 14px;
+    padding: 20px 15px;
     text-align: center;
-    border: 1px solid rgba(0,255,0,0.2);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    border: 1px solid rgba(0,255,0,0.15);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.4);
     transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     cursor: pointer;
-    transform: rotateX(5deg);
+    transform: rotateX(3deg);
     position: relative;
     overflow: hidden;
 }
 
 .stat-card:hover {
-    transform: rotateX(0deg) scale(1.05) translateZ(30px);
+    transform: rotateX(0deg) scale(1.04) translateZ(25px);
     border-color: #00ff00;
-    box-shadow: 0 20px 50px rgba(0,255,0,0.3);
+    box-shadow: 0 15px 40px rgba(0,255,0,0.2);
 }
 
 .stat-card::before {
@@ -502,7 +524,7 @@ body {
     top: 0;
     left: 0;
     width: 100%;
-    height: 3px;
+    height: 2px;
     background: linear-gradient(90deg, transparent, #00ff00, transparent);
     animation: shimmer 2s infinite;
 }
@@ -513,50 +535,54 @@ body {
 }
 
 .stat-value {
-    font-size: 2.8em;
+    font-size: 2.4em;
     font-weight: 900;
-    margin-bottom: 8px;
+    margin-bottom: 5px;
     text-shadow: 0 0 30px currentColor;
+    font-family: 'Orbitron', sans-serif;
 }
 
 .stat-label {
-    font-size: 0.8em;
+    font-size: 0.7em;
     color: #88aa88;
     text-transform: uppercase;
     letter-spacing: 2px;
+    font-weight: 600;
 }
 
 .stat-hits .stat-value { color: #00ff00; }
 .stat-error .stat-value { color: #ff6b35; }
 .stat-checked .stat-value { color: #00ccff; }
-.stat-time .stat-value { color: #ff00ff; font-size: 1.4em; }
+.stat-time .stat-value { color: #ff00ff; font-size: 1.2em; }
 
-/* ===== SERVICES 3D ===== */
+/* ===== SERVICES ===== */
 .section-title {
-    font-size: 2em;
+    font-size: 1.6em;
     text-align: center;
-    margin: 30px 0 20px;
-    text-shadow: 0 0 30px rgba(0,255,0,0.3);
+    margin: 25px 0 15px;
+    text-shadow: 0 0 30px rgba(0,255,0,0.2);
     animation: flicker 2s infinite;
     transform: translateZ(30px);
+    font-family: 'Orbitron', sans-serif;
+    letter-spacing: 2px;
 }
 
 .services-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 15px;
-    margin-bottom: 30px;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
     transform: translateZ(10px);
 }
 
 .service-card {
-    background: linear-gradient(145deg, rgba(0,255,0,0.05), rgba(0,0,0,0.7));
+    background: linear-gradient(145deg, rgba(0,255,0,0.04), rgba(0,0,0,0.7));
     border-radius: 12px;
-    padding: 20px;
+    padding: 16px 18px;
     display: flex;
     align-items: center;
-    gap: 15px;
-    border: 1px solid rgba(0,255,0,0.1);
+    gap: 14px;
+    border: 1px solid rgba(0,255,0,0.08);
     transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     cursor: pointer;
     position: relative;
@@ -564,10 +590,10 @@ body {
 }
 
 .service-card:hover {
-    transform: translateZ(30px) scale(1.05);
+    transform: translateZ(25px) scale(1.04);
     border-color: #00ff00;
-    box-shadow: 0 15px 40px rgba(0,255,0,0.2);
-    background: linear-gradient(145deg, rgba(0,255,0,0.1), rgba(0,0,0,0.8));
+    box-shadow: 0 12px 35px rgba(0,255,0,0.15);
+    background: linear-gradient(145deg, rgba(0,255,0,0.08), rgba(0,0,0,0.8));
 }
 
 .service-card::after {
@@ -580,9 +606,9 @@ body {
     background: conic-gradient(
         from 0deg,
         transparent,
-        rgba(0,255,0,0.05),
+        rgba(0,255,0,0.04),
         transparent,
-        rgba(0,255,255,0.05),
+        rgba(0,255,255,0.04),
         transparent
     );
     animation: rotate 10s linear infinite;
@@ -595,15 +621,18 @@ body {
 }
 
 .service-icon {
-    font-size: 2.2em;
-    animation: bounce 2s infinite;
+    font-size: 2em;
     position: relative;
     z-index: 2;
-}
-
-@keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-8px); }
+    flex-shrink: 0;
+    width: 48px;
+    height: 48px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0,255,0,0.06);
+    border-radius: 12px;
+    border: 1px solid rgba(0,255,0,0.08);
 }
 
 .service-info {
@@ -613,26 +642,184 @@ body {
 }
 
 .service-name {
-    font-size: 1.1em;
+    font-size: 1em;
     font-weight: 700;
     color: #fff;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
+    font-family: 'Inter', sans-serif;
 }
 
 .service-desc {
-    font-size: 0.75em;
+    font-size: 0.7em;
     color: #88aa88;
+    font-weight: 400;
+}
+
+.service-arrow {
+    font-size: 1.4em;
+    color: #446644;
+    transition: all 0.3s;
+    position: relative;
+    z-index: 2;
+}
+
+.service-card:hover .service-arrow {
+    color: #00ff00;
+    transform: translateX(5px);
+}
+
+/* ===== SERVICE DETAIL MODAL ===== */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 999;
+    justify-content: center;
+    align-items: center;
+    backdrop-filter: blur(8px);
+    animation: fadeIn 0.3s ease;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.9); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.modal-content {
+    background: linear-gradient(145deg, #0a1a0a, #000);
+    border: 2px solid #00ff00;
+    border-radius: 20px;
+    padding: 35px 40px;
+    max-width: 500px;
+    width: 90%;
+    box-shadow: 0 0 60px rgba(0,255,0,0.2);
+    position: relative;
+    transform: translateZ(50px);
+    animation: modalPop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes modalPop {
+    from { transform: scale(0.8) translateY(30px); opacity: 0; }
+    to { transform: scale(1) translateY(0); opacity: 1; }
+}
+
+.modal-close {
+    position: absolute;
+    top: 15px;
+    right: 20px;
+    font-size: 1.8em;
+    color: #ff4444;
+    cursor: pointer;
+    transition: all 0.3s;
+    background: none;
+    border: none;
+    font-family: 'Inter', sans-serif;
+}
+
+.modal-close:hover {
+    transform: rotate(90deg) scale(1.2);
+    color: #ff0000;
+}
+
+.modal-icon {
+    font-size: 4em;
+    text-align: center;
+    margin-bottom: 10px;
+}
+
+.modal-title {
+    font-size: 1.8em;
+    font-weight: 700;
+    text-align: center;
+    color: #00ff00;
+    margin-bottom: 5px;
+    font-family: 'Orbitron', sans-serif;
+}
+
+.modal-desc {
+    text-align: center;
+    color: #88aa88;
+    margin-bottom: 20px;
+    font-size: 0.95em;
+}
+
+.modal-info {
+    background: rgba(0,255,0,0.05);
+    border-radius: 10px;
+    padding: 15px 20px;
+    border: 1px solid rgba(0,255,0,0.1);
+    margin-bottom: 15px;
+}
+
+.modal-info-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 0;
+    color: #aaa;
+    font-size: 0.85em;
+    border-bottom: 1px solid rgba(0,255,0,0.05);
+}
+
+.modal-info-item:last-child {
+    border-bottom: none;
+}
+
+.modal-info-item span:last-child {
+    color: #00ff00;
+    font-weight: 600;
+}
+
+.modal-command {
+    background: rgba(0,0,0,0.5);
+    border: 1px solid rgba(0,255,0,0.2);
+    border-radius: 8px;
+    padding: 12px 15px;
+    font-family: 'Courier New', monospace;
+    color: #00ff00;
+    font-size: 0.85em;
+    word-break: break-all;
+    margin-bottom: 15px;
+}
+
+.modal-btn {
+    display: block;
+    width: 100%;
+    padding: 12px;
+    background: linear-gradient(135deg, #00ff00, #00cc00);
+    border: none;
+    border-radius: 10px;
+    color: #000;
+    font-weight: 700;
+    font-size: 1em;
+    cursor: pointer;
+    transition: all 0.3s;
+    font-family: 'Inter', sans-serif;
+}
+
+.modal-btn:hover {
+    transform: scale(1.03);
+    box-shadow: 0 0 30px rgba(0,255,0,0.4);
 }
 
 /* ===== FOOTER ===== */
 .footer {
     text-align: center;
-    padding: 20px;
+    padding: 15px;
     color: #446644;
-    font-size: 0.8em;
-    border-top: 1px solid rgba(0,255,0,0.1);
-    margin-top: 20px;
+    font-size: 0.7em;
+    border-top: 1px solid rgba(0,255,0,0.06);
+    margin-top: 15px;
     transform: translateZ(10px);
+    font-weight: 400;
+    letter-spacing: 1px;
 }
 
 .footer a {
@@ -648,18 +835,23 @@ body {
 
 /* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
-    .title { font-size: 2em; }
-    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .title { font-size: 1.8em; }
+    .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
     .services-grid { grid-template-columns: 1fr; }
     .social-buttons { flex-direction: column; align-items: center; }
     .header { padding: 20px; }
-    .container { padding: 15px; margin: 10px; }
+    .container { padding: 10px; margin: 10px; max-height: 95vh; }
+    .modal-content { padding: 25px 20px; }
+    .stat-value { font-size: 1.8em; }
 }
 
 @media (max-width: 480px) {
-    .title { font-size: 1.5em; }
-    .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
-    .stat-value { font-size: 2em; }
+    .title { font-size: 1.4em; letter-spacing: 1px; }
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+    .stat-value { font-size: 1.5em; }
+    .stat-card { padding: 12px 10px; }
+    .service-card { padding: 12px 14px; }
+    .modal-content { padding: 20px 15px; }
 }
 </style>
 </head>
@@ -684,7 +876,7 @@ body {
         
         <div class="status-badge" id="status-badge" style="background: BOT_COLOR;">🔴 San sang</div>
         <div class="audio-indicator"><span class="dot"></span> 🔊 AM THANH DANG PHAT</div>
-        <div class="subtitle" style="font-size:0.8em;color:#446644;margin-top:5px;">⏱ Uptime: UPTIME_PLACEHOLDER</div>
+        <div class="subtitle" style="font-size:0.7em;color:#446644;margin-top:5px;">⏱ Uptime: UPTIME_PLACEHOLDER</div>
     </div>
     
     <!-- ===== STATS ===== -->
@@ -703,11 +895,28 @@ body {
     
     <div class="footer">
         <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> - All rights reserved</p>
-        <p style="color:#334433;font-size:0.7em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO</p>
+        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO</p>
     </div>
 </div>
 
-<!-- ===== AUDIO - SU DUNG NHIEU CACH DE DAM BAO PHAT ===== -->
+<!-- ===== MODAL ===== -->
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <div class="modal-icon" id="modalIcon">🎮</div>
+        <div class="modal-title" id="modalTitle">Service</div>
+        <div class="modal-desc" id="modalDesc">Description</div>
+        <div class="modal-info">
+            <div class="modal-info-item"><span>📌 Service ID</span><span id="modalId">-</span></div>
+            <div class="modal-info-item"><span>🔗 API Route</span><span id="modalRoute">-</span></div>
+            <div class="modal-info-item"><span>📝 Parameters</span><span id="modalParams">tk, mk</span></div>
+        </div>
+        <div class="modal-command" id="modalCommand">/check user:pass service</div>
+        <button class="modal-btn" onclick="closeModal()">✅ OK, TOI HIEU</button>
+    </div>
+</div>
+
+<!-- ===== AUDIO ===== -->
 <audio id="bg-audio" loop autoplay>
     <source src="/audio" type="audio/wav">
     <source src="/audio.mp3" type="audio/mpeg">
@@ -723,7 +932,7 @@ bgCanvas.width = window.innerWidth;
 bgCanvas.height = window.innerHeight;
 
 let particles = [];
-const PARTICLE_COUNT = 150;
+const PARTICLE_COUNT = 120;
 
 class Particle {
     constructor() {
@@ -780,7 +989,7 @@ matrixCanvas.width = window.innerWidth;
 matrixCanvas.height = window.innerHeight;
 
 const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}[]|;:,.<>?~';
-const fontSize = 14;
+const fontSize = 13;
 const columns = Math.ceil(matrixCanvas.width / fontSize);
 const drops = [];
 for (let i = 0; i < columns; i++) {
@@ -793,7 +1002,7 @@ function drawMatrix() {
     
     for (let i = 0; i < drops.length; i++) {
         const text = chars[Math.floor(Math.random() * chars.length)];
-        const bright = Math.random() > 0.9 ? '#ffffff' : '#00ff00';
+        const bright = Math.random() > 0.92 ? '#ffffff' : '#00ff00';
         matrixCtx.fillStyle = bright;
         matrixCtx.font = fontSize + 'px monospace';
         matrixCtx.fillText(text, i * fontSize, drops[i] * fontSize);
@@ -864,7 +1073,7 @@ class LaserBeam {
         ctx.lineWidth = this.width;
         ctx.globalAlpha = alpha;
         ctx.shadowColor = this.color;
-        ctx.shadowBlur = 15;
+        ctx.shadowBlur = 12;
         ctx.beginPath();
         ctx.moveTo(this.x, this.y);
         ctx.lineTo(this.tx, this.ty);
@@ -875,7 +1084,7 @@ class LaserBeam {
             ctx.fillStyle = this.color;
             ctx.globalAlpha = pa * alpha;
             ctx.shadowColor = this.color;
-            ctx.shadowBlur = 8;
+            ctx.shadowBlur = 6;
             ctx.beginPath();
             ctx.arc(p.x, p.y, Math.random() * 2 + 1, 0, Math.PI * 2);
             ctx.fill();
@@ -898,7 +1107,7 @@ function drawLasers() {
     if (Math.random() > 0.97) {
         const fx = Math.random() * laserCanvas.width;
         const fy = Math.random() * laserCanvas.height;
-        const fr = Math.random() * 40 + 20;
+        const fr = Math.random() * 35 + 15;
         const fc = laserColors[Math.floor(Math.random() * laserColors.length)];
         const g = laserCtx.createRadialGradient(fx, fy, 0, fx, fy, fr);
         g.addColorStop(0, fc + 'FF');
@@ -911,50 +1120,42 @@ function drawLasers() {
     requestAnimationFrame(drawLasers);
 }
 
-for (let i = 0; i < 20; i++) createLaser();
+for (let i = 0; i < 15; i++) createLaser();
 drawLasers();
 
 // Mouse laser
 document.addEventListener('mousemove', function(e) {
-    if (Math.random() > 0.85) {
+    if (Math.random() > 0.88) {
         createLaser(e.clientX, e.clientY);
         if (lasers.length > 80) lasers.shift();
     }
 });
 
 document.addEventListener('click', function(e) {
-    for (let i = 0; i < 8; i++) {
+    for (let i = 0; i < 6; i++) {
         createLaser(e.clientX, e.clientY);
     }
-    if (lasers.length > 80) lasers.splice(0, 8);
+    if (lasers.length > 80) lasers.splice(0, 6);
 });
 
 // ========================================================================
-// 4. AUDIO - FIX: DAM BAO PHAT BANG NHIEU CACH
+// 4. AUDIO - FIX: DAM BAO PHAT
 // ========================================================================
 const audio = document.getElementById('bg-audio');
 
-// Cach 1: Auto play truc tiep
 function playAudioDirect() {
-    audio.volume = 0.3;
+    audio.volume = 0.25;
     audio.loop = true;
     const promise = audio.play();
     if (promise) {
         promise.then(() => {
             console.log('🎵 Audio playing successfully!');
-            document.querySelector('.audio-indicator').innerHTML = '<span class="dot"></span> 🔊 AM THANH DANG PHAT';
         }).catch((e) => {
             console.log('Auto-play blocked, using fallback...');
-            // Cach 2: Fallback voi user interaction
             document.addEventListener('click', function playOnce() {
-                audio.play().then(() => {
-                    console.log('🎵 Audio playing after click!');
-                    document.querySelector('.audio-indicator').innerHTML = '<span class="dot"></span> 🔊 AM THANH DANG PHAT';
-                }).catch(() => {});
+                audio.play().catch(() => {});
                 document.removeEventListener('click', playOnce);
             }, { once: true });
-            
-            // Cach 3: Tao audio context de phat
             try {
                 const AudioContext = window.AudioContext || window.webkitAudioContext;
                 const ctx = new AudioContext();
@@ -968,17 +1169,14 @@ function playAudioDirect() {
     }
 }
 
-// Reload neu loi
 audio.addEventListener('error', function() {
     console.log('Audio error, reloading...');
     audio.load();
     setTimeout(playAudioDirect, 500);
 });
 
-// Khoi dong am thanh
 setTimeout(playAudioDirect, 300);
 
-// Kiem tra trang thai audio
 setInterval(() => {
     if (audio.paused && !audio.ended) {
         console.log('Audio paused, trying to resume...');
@@ -1004,21 +1202,89 @@ setInterval(updateStats, 5000);
 updateStats();
 
 // ========================================================================
-// 6. SERVICE CLICK 3D
+// 6. SERVICE DETAIL MODAL
 // ========================================================================
-document.querySelectorAll('.service-card').forEach(card => {
-    card.addEventListener('click', function() {
-        const name = this.querySelector('.service-name').textContent;
-        this.style.borderColor = '#ff00ff';
-        this.style.boxShadow = '0 0 60px rgba(255,0,255,0.6)';
-        this.style.transform = 'translateZ(50px) scale(1.1)';
-        setTimeout(() => {
-            this.style.borderColor = 'rgba(0,255,0,0.1)';
-            this.style.boxShadow = 'none';
-            this.style.transform = '';
-        }, 500);
-        console.log('Service:', name);
-    });
+const serviceData = {
+    "lienquan": {
+        icon: "🎮",
+        name: "Lien Quan",
+        desc: "Check tai khoan Lien Quan + FC Online",
+        route: "/api/lienquan",
+        params: "tk, mk",
+        command: "/check user:pass lienquan"
+    },
+    "miniworld": {
+        icon: "🌍",
+        name: "Mini World",
+        desc: "Check tai khoan Mini World",
+        route: "/api/miniworld",
+        params: "tk, mk",
+        command: "/check user:pass miniworld"
+    },
+    "blockmango": {
+        icon: "🧱",
+        name: "Blockman Go",
+        desc: "Check tai khoan Blockman Go",
+        route: "/api/blockmango",
+        params: "tk, mk",
+        command: "/check user:pass blockmango"
+    },
+    "deltaforce": {
+        icon: "🔫",
+        name: "Delta Force",
+        desc: "Check tai khoan Delta Force",
+        route: "/api/deltaforce",
+        params: "tk, mk",
+        command: "/check user:pass deltaforce"
+    },
+    "hotmail": {
+        icon: "📧",
+        name: "Hotmail",
+        desc: "Check tai khoan Hotmail",
+        route: "/api/hotmail",
+        params: "tk, mk",
+        command: "/check user:pass hotmail"
+    },
+    "fc": {
+        icon: "⚽",
+        name: "FC Online",
+        desc: "Check tai khoan FC Online",
+        route: "/api/fc",
+        params: "tk, mk",
+        command: "/check user:pass fc"
+    },
+    "fullpack": {
+        icon: "📦",
+        name: "Fullpack",
+        desc: "Check tat ca dich vu",
+        route: "/api/fullpack",
+        params: "tk, mk",
+        command: "/check user:pass fullpack"
+    }
+};
+
+function showServiceDetail(key) {
+    const data = serviceData[key];
+    if (!data) return;
+    
+    document.getElementById('modalIcon').textContent = data.icon;
+    document.getElementById('modalTitle').textContent = data.name;
+    document.getElementById('modalDesc').textContent = data.desc;
+    document.getElementById('modalId').textContent = key;
+    document.getElementById('modalRoute').textContent = data.route;
+    document.getElementById('modalParams').textContent = data.params;
+    document.getElementById('modalCommand').textContent = data.command;
+    
+    document.getElementById('modalOverlay').classList.add('active');
+}
+
+function closeModal() {
+    document.getElementById('modalOverlay').classList.remove('active');
+}
+
+// ESC to close
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeModal();
 });
 
 // ========================================================================
@@ -1035,7 +1301,7 @@ window.addEventListener('resize', () => {
 
 console.log('🔥 GARENA CHECKER HACKER EDITION LOADED!');
 console.log('💀 3D Effects - Laser - Matrix - Auto Audio');
-console.log('🎵 Audio should be playing now!');
+console.log('📱 Click service card for details!');
 </script>
 </body>
 </html>"""
@@ -1075,7 +1341,7 @@ def start_render_server():
         print(f"[*] Audio: http://0.0.0.0:{port}/audio")
         print(f"[*] HIEU UNG 3D + HACKER DEP")
         print(f"[*] AM THANH TU DONG PHAT")
-        print(f"[*] DA BO LENH /hits VA /report")
+        print(f"[*] UI CAI TIEN VOI ICON THUC TE")
         server.serve_forever()
     except Exception as e:
         print(f"[!] Loi web server: {e}")
@@ -1117,7 +1383,7 @@ MAX_MESSAGE_LENGTH = 4000
 SERVICE_ROUTES = {
     "lienquan": {
         "route": "/api/lienquan",
-        "desc": "Lien Quan + FC Online",
+        "desc": "Lien Quan Mobile",
         "icon": "🎮",
         "params": ["tk", "mk"],
         "extra_params": {}
@@ -2367,6 +2633,7 @@ def main():
     print("    ===== AM THANH TU DONG PHAT ===== ")
     print("    ===== KHONG LUU ACCOUNT ===== ")
     print("    ===== DA BO /hits VA /report ===== ")
+    print("    ===== UI CAI TIEN VOI ICON THUC TE ===== ")
     print("=" * 60)
     
     while True:
