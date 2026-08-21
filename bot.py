@@ -1,5 +1,5 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - FULL HOAN CHINH
+#    GARENA CHECKER BOT V6.1 - FIX FORMAT DUNG API
 # ========================================================================
 import subprocess, sys, importlib, threading, time, json, os, re, struct, math
 import telebot, requests
@@ -422,7 +422,20 @@ def fix_encoding(text):
         'á»§': 'ủ', 'Å©': 'ũ', 'á»¥': 'ụ', 'Ã¹': 'ù', 'Ãº': 'ú',
         'á»©': 'ứ', 'á»«': 'ừ', 'á»­': 'ử', 'á»¯': 'ữ', 'á»±': 'ự',
         'á»‰': 'ỉ', 'á»‹': 'ị', 'áº¹': 'ẻ', 'áº»': 'ẻ', 'áº½': 'ẽ',
-        'áº¹': 'ẹ', 'á»‰': 'ỉ', 'á»‹': 'ị'
+        'áº¹': 'ẹ', 'á»‰': 'ỉ', 'á»‹': 'ị',
+        'MaTá»›iNÃ¨': 'MaTớiNè', 'K.CÆ°Æ¡ng': 'K.Cương',
+        'VÅ© khÃ­ tá»‘i thÆ°á»£ng': 'Vũ khí tối thượng',
+        'Nghiá»‡p Hoáº£ YÃªu Háº­u': 'Nghiệp Hoả Yêu Hậu',
+        'Tháº§n long tá»· tá»·': 'Thần long tỷ tỷ',
+        'BÃ¡ch TÆ°á»›ng LÃ£o Äáº¡i': 'Bách Tướng Lão Đại',
+        'ÄiÃªu Thuyá»n Tiá»‡c bÃ£i biá»ƒn': 'Điêu Thuyền Tiệc bãi biển',
+        'Giai Ä‘iá»‡u GiÃ¡ng Sinh': 'Giai điệu Giáng Sinh',
+        'PhÃ¹ thá»§y Há»™i há»a': 'Phù thủy Hội họa',
+        'Äáº¡o táº·c tá»­ quang': 'Đạo tặc tử quang',
+        'SiÃªu Cáº¥p Tá»‘i ThÆ°á»£ng': 'Siêu Cấp Tối Thượng',
+        'NhÃ³c tá»³ bÃ¡ Ä‘áº¡o': 'Nhóc tỳ bá đạo',
+        'Äá»“ng phá»¥c': 'Đồng phục',
+        'Phi hÃ nh gia': 'Phi hành gia',
     }
     for old, new in replacements.items():
         text = text.replace(old, new)
@@ -520,13 +533,10 @@ def loc_tk_mk_only(content):
     stats_loc = {"total": 0, "valid": 0, "invalid": 0, "duplicate": 0}
     if not content:
         return accounts, stats_loc
-    
     pattern_colon = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80}):([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
     pattern_pipe = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80})\|([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
-    
     lines = content.split('\n')
     stats_loc["total"] = len(lines)
-    
     for line in lines:
         line = line.strip()
         if not line:
@@ -539,10 +549,8 @@ def loc_tk_mk_only(content):
             continue
         if re.match(r'^\d{2}/\d{2}/\d{4}', line):
             continue
-        
         colon_count = line.count(':')
         pipe_count = line.count('|')
-        
         if colon_count == 1 and pipe_count == 0:
             matches = re.findall(pattern_colon, line)
             if matches:
@@ -594,7 +602,6 @@ def loc_tk_mk_only(content):
                     else:
                         stats_loc["invalid"] += 1
                 continue
-    
     if not accounts:
         all_matches = re.findall(pattern_colon, content)
         for user, pwd in all_matches:
@@ -773,41 +780,100 @@ def check_account_api(username, password, service, use_delay=True):
                                         value[sub_key] = fix_encoding(sub_value)
                     if isinstance(result_data, dict):
                         is_hit = False
+                        
+                        # ========== KIEM TRA BAND ==========
+                        is_banded = False
+                        band_keys = ["banned", "ban", "is_ban", "band", "is_banned", "account_banned", "banned_status", "ban_status", "is_banded", "banded", "ban_info", "aov_banned"]
+                        for bk in band_keys:
+                            if bk in result_data:
+                                band_val = result_data[bk]
+                                if isinstance(band_val, bool) and band_val:
+                                    is_banded = True
+                                    break
+                                elif isinstance(band_val, str) and band_val.lower() in ["true", "yes", "1", "ban", "banned", "yes"]:
+                                    is_banded = True
+                                    break
+                                elif isinstance(band_val, (int, float)) and band_val > 0:
+                                    is_banded = True
+                                    break
+                        
+                        data_val = result_data.get("data")
+                        if data_val is not None:
+                            if isinstance(data_val, dict):
+                                for bk in band_keys:
+                                    if bk in data_val:
+                                        band_val = data_val[bk]
+                                        if isinstance(band_val, bool) and band_val:
+                                            is_banded = True
+                                            break
+                                        elif isinstance(band_val, str) and band_val.lower() in ["true", "yes", "1", "ban", "banned"]:
+                                            is_banded = True
+                                            break
+                            elif isinstance(data_val, str) and "ban" in data_val.lower():
+                                is_banded = True
+                        
+                        message_val = str(result_data.get("message", "")).lower()
+                        if "ban" in message_val or "banned" in message_val:
+                            is_banded = True
+                        
+                        # ========== XAC DINH HIT ==========
                         status_val = result_data.get("status")
                         if status_val is not None:
                             if status_val in [True, "true", 1, "1", "True", "TRUE", "success", "Success", "SUCCESS", "HIT", "hit"]:
                                 is_hit = True
                             elif status_val in [False, "false", 0, "0", "False", "FALSE", "fail", "Fail", "FAIL", "dead", "Dead", "DEAD"]:
-                                is_hit = False
+                                if is_banded:
+                                    is_hit = True
+                                else:
+                                    is_hit = False
+                        
                         success_val = result_data.get("success")
                         if not is_hit and success_val is not None:
                             if success_val in [True, "true", 1, "1", "True", "TRUE"]:
                                 is_hit = True
                             elif success_val in [False, "false", 0, "0", "False", "FALSE"]:
-                                is_hit = False
+                                if is_banded:
+                                    is_hit = True
+                                else:
+                                    is_hit = False
+                        
                         result_val = result_data.get("result")
                         if result_val is not None:
                             result_str = str(result_val).lower()
                             if result_str in ["hit", "true", "success", "valid", "1", "live", "ok"]:
                                 is_hit = True
                             elif result_str in ["dead", "false", "fail", "invalid", "0", "die", "error"]:
-                                is_hit = False
-                        message_val = result_data.get("message", "")
+                                if is_banded:
+                                    is_hit = True
+                                else:
+                                    is_hit = False
+                        
                         if message_val:
-                            msg_lower = str(message_val).lower()
-                            if any(word in msg_lower for word in ["thanh cong", "success", "valid", "hit", "live", "ok"]):
+                            if any(word in message_val for word in ["thanh cong", "success", "valid", "hit", "live", "ok"]):
                                 is_hit = True
-                            elif any(word in msg_lower for word in ["that bai", "fail", "invalid", "dead", "error"]):
-                                is_hit = False
-                        data_val = result_data.get("data")
+                            elif any(word in message_val for word in ["that bai", "fail", "invalid", "dead", "error"]):
+                                if is_banded:
+                                    is_hit = True
+                                else:
+                                    is_hit = False
+                        
                         if data_val is not None:
                             if isinstance(data_val, (dict, list, str)) and data_val:
                                 is_hit = True
+                        
                         info_fields = ["uid", "id", "name", "nickname", "account", "info", "user", "player", "level", "rank", "email", "phone", "sdt", "shells", "aov_name", "aov_level", "aov_rank", "aov_total_skins", "aov_total_champs", "fc_name", "fc_ovr", "garena_created", "last_login", "region", "aov_ss", "aov_sss", "aov_anime"]
                         for field in info_fields:
                             if field in result_data and result_data[field] is not None and result_data[field] != "":
                                 is_hit = True
                                 break
+                        
+                        if result_data.get("uid") or result_data.get("aov_uid") or result_data.get("id"):
+                            is_hit = True
+                        
+                        if is_banded:
+                            is_hit = True
+                            result_data["_is_banded"] = True
+                        
                         result_data["result"] = "hit" if is_hit else "dead"
                         with cache_lock:
                             cache_results[cache_key] = result_data
@@ -823,6 +889,8 @@ def check_account_api(username, password, service, use_delay=True):
                         result = {"result": "hit"}
                     elif any(word in text_lower for word in ["fail", "false", "dead", "invalid", "error", "die"]):
                         result = {"result": "dead"}
+                    elif "ban" in text_lower:
+                        result = {"result": "hit", "_is_banded": True}
                     else:
                         result = {"result": "unknown"}
                     with cache_lock:
@@ -876,14 +944,16 @@ def format_full_info(username, password, service, result_data):
         "shells": "💲 Sò", "aov_shells": "💲 Sò",
         "nap_so": "💰 Nạp sò", "nap_time": "💰 Nạp sò",
         "email_verified": "📩 EMAIL", "email": "📩 EMAIL",
-        "phone_verified": "📱 SĐT", "phone": "📱 SĐT", "sdt": "📱 SĐT",
+        "mobile_bound": "📱 SĐT", "phone_verified": "📱 SĐT", "phone": "📱 SĐT", "sdt": "📱 SĐT",
         "password_set": "🛡 PASS", "pass_set": "🛡 PASS",
         "fb_linked": "🔗 FB", "fb": "🔗 FB",
+        "account_secured": "🛡 Authen", "authen": "🛡 Authen",
         "banned": "🚫 BAND", "ban": "🚫 BAND", "is_ban": "🚫 BAND", "band": "🚫 BAND",
         "is_banned": "🚫 BAND", "account_banned": "🚫 BAND", "banned_status": "🚫 BAND",
         "ban_status": "🚫 BAND", "is_banded": "🚫 BAND", "banded": "🚫 BAND",
         "ban_info": "🚫 BAND", "ban_detail": "🚫 BAND", "ban_reason": "🚫 BAND",
         "account_status": "🚫 BAND", "acc_status": "🚫 BAND",
+        "aov_banned": "🚫 BAND",
         "last_login": "⏰ Login cuối", "last_login_time": "⏰ Login cuối",
         "garena_created": "📅 Tạo GR", "created_time": "📅 Tạo GR",
         "aov_name": "🔥 NAME", "nickname": "🔥 NAME", "name": "🔥 NAME",
@@ -893,7 +963,6 @@ def format_full_info(username, password, service, result_data):
         "aov_total_champs": "💪 HERO", "total_champs": "💪 HERO", "champs": "💪 HERO",
         "aov_qh": "⚡️ QH", "qh": "⚡️ QH",
         "cccd": "📄 CCCD",
-        "authen": "🛡 Authen",
         "aov_ss": "✨ SS", "ss": "✨ SS",
         "aov_anime": "🔥 Anime", "anime": "🔥 Anime",
         "aov_other": "🎲 Other", "other": "🎲 Other",
@@ -926,7 +995,7 @@ def format_full_info(username, password, service, result_data):
                 if label not in info_dict or info_dict[label] is None:
                     info_dict[label] = value
     
-    # Xử lý boolean
+    # ========== XU LY BOOLEAN ==========
     if "📩 EMAIL" in info_dict:
         val = info_dict["📩 EMAIL"]
         if isinstance(val, bool):
@@ -936,6 +1005,8 @@ def format_full_info(username, password, service, result_data):
                 info_dict["📩 EMAIL"] = "Chưa Xác Thực [Yes]"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["📩 EMAIL"] = "Chưa Xác Thực [No]"
+    else:
+        info_dict["📩 EMAIL"] = "Chưa Xác Thực [No]"
     
     if "📱 SĐT" in info_dict:
         val = info_dict["📱 SĐT"]
@@ -946,6 +1017,8 @@ def format_full_info(username, password, service, result_data):
                 info_dict["📱 SĐT"] = "Yes"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["📱 SĐT"] = "No"
+    else:
+        info_dict["📱 SĐT"] = "No"
     
     if "🛡 PASS" in info_dict:
         val = info_dict["🛡 PASS"]
@@ -956,6 +1029,8 @@ def format_full_info(username, password, service, result_data):
                 info_dict["🛡 PASS"] = "Yes"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["🛡 PASS"] = "No"
+    else:
+        info_dict["🛡 PASS"] = "No"
     
     if "🔗 FB" in info_dict:
         val = info_dict["🔗 FB"]
@@ -966,18 +1041,23 @@ def format_full_info(username, password, service, result_data):
                 info_dict["🔗 FB"] = "Yes"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["🔗 FB"] = "NO"
+    else:
+        info_dict["🔗 FB"] = "NO"
     
+    # ========== BAND ==========
     if "🚫 BAND" in info_dict:
         val = info_dict["🚫 BAND"]
         if isinstance(val, bool):
-            info_dict["🚫 BAND"] = "Yes" if val else "NO"
+            info_dict["🚫 BAND"] = "YES" if val else "NO"
         elif isinstance(val, str):
-            if val.lower() in ["true", "yes", "1"]:
-                info_dict["🚫 BAND"] = "Yes"
+            if val.lower() in ["true", "yes", "1", "ban", "banned"]:
+                info_dict["🚫 BAND"] = "YES"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["🚫 BAND"] = "NO"
             else:
-                info_dict["🚫 BAND"] = "NO"
+                info_dict["🚫 BAND"] = "YES" if val else "NO"
+    elif result_data.get("_is_banded"):
+        info_dict["🚫 BAND"] = "YES"
     else:
         info_dict["🚫 BAND"] = "NO"
     
@@ -990,6 +1070,8 @@ def format_full_info(username, password, service, result_data):
                 info_dict["📄 CCCD"] = "Yes"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["📄 CCCD"] = "No"
+    else:
+        info_dict["📄 CCCD"] = "No"
     
     if "🛡 Authen" in info_dict:
         val = info_dict["🛡 Authen"]
@@ -1000,8 +1082,29 @@ def format_full_info(username, password, service, result_data):
                 info_dict["🛡 Authen"] = "Yes"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["🛡 Authen"] = "No"
+    else:
+        info_dict["🛡 Authen"] = "No"
     
-    # Xử lý list SS/Anime/Other - Ưu tiên list
+    # ========== TINH TRANG ==========
+    tinh_trang_parts = []
+    if info_dict.get("📩 EMAIL", "").startswith("Chưa Xác Thực [Yes]"):
+        tinh_trang_parts.append("Mail")
+    if info_dict.get("📱 SĐT") == "Yes":
+        tinh_trang_parts.append("SĐT")
+    if info_dict.get("🛡 PASS") == "Yes":
+        tinh_trang_parts.append("Pass")
+    if info_dict.get("🚫 BAND") == "YES":
+        tinh_trang_parts.append("BAN")
+    
+    if tinh_trang_parts:
+        if "BAN" in tinh_trang_parts:
+            info_dict["📋 Tình Trạng"] = "Full Info [BAN]"
+        else:
+            info_dict["📋 Tình Trạng"] = f"Acc Dính {' + '.join(tinh_trang_parts)}"
+    else:
+        info_dict["📋 Tình Trạng"] = "Acc Sạch"
+    
+    # ========== LIST SS/ANIME/OTHER ==========
     for label, list_keys in [
         ("✨ SS", ["aov_ss_list", "ss_list", "aov_ss", "ss"]),
         ("🔥 Anime", ["aov_anime_list", "anime_list", "aov_anime", "anime"]),
@@ -1017,7 +1120,7 @@ def format_full_info(username, password, service, result_data):
                     info_dict[label] = str(val)
                     break
     
-    # Xử lý thời gian
+    # ========== THOI GIAN ==========
     if "⏰ Login cuối" in info_dict:
         val = info_dict["⏰ Login cuối"]
         if isinstance(val, (int, float)) and val > 1000000000:
@@ -1035,7 +1138,7 @@ def format_full_info(username, password, service, result_data):
         elif isinstance(val, (int, float)) and val == 0:
             info_dict["💰 Nạp sò"] = "01/01/1970"
     
-    # Build message
+    # ========== BUILD MESSAGE ==========
     msg = f"✅ HIT\n🔑 <code>{username}:{password}</code>\n"
     
     for label in display_order:
