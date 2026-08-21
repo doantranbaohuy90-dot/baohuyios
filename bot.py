@@ -1,12 +1,11 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - FULL CAI TIEN
+#    GARENA CHECKER BOT V6.1 - FIX AUDIO + BO /HITS & /REPORT
 # ========================================================================
-#    - Fix audio khong nghe duoc
-#    - Bo nut proxy
-#    - Bo upload audio tren web
-#    - Cai tien hieu ung khi an nut
-#    - Toi uu hieu suat
-#    - Them nhieu tinh nang nho
+#    - DA BO LENH /hits VA /report
+#    - FIX AM THANH: SU DUNG WEB AUDIO API + FALLBACK
+#    - AM THANH TU DONG PHAT NGAY KHI VAO TRANG
+#    - HIEU UNG 3D + HACKER DEP
+#    - KHONG LUU ACCOUNT
 # ========================================================================
 
 import subprocess
@@ -104,7 +103,6 @@ class RenderHandler(BaseHTTPRequestHandler):
             self.wfile.write(b"Bot is running!")
     
     def get_audio_data(self):
-        """Lay du lieu audio (custom neu co, khong thi tao default)"""
         global CUSTOM_AUDIO_DATA
         with AUDIO_LOCK:
             if CUSTOM_AUDIO_DATA:
@@ -112,26 +110,26 @@ class RenderHandler(BaseHTTPRequestHandler):
         return self.generate_default_audio()
     
     def generate_default_audio(self):
-        """Tao am thanh default - FIX: am thanh ro rang va chuan WAVE"""
+        """Tao am thanh default - FIX: am thanh ro rang, phat duoc"""
         try:
             sample_rate = 44100
-            duration = 4.0
+            duration = 30.0  # Am thanh dai de nghe ro
             num_samples = int(sample_rate * duration)
             
-            # Tao audio data PCM 16-bit voi nhieu tan so de nghe ro
             audio_buffer = bytearray()
             for i in range(num_samples):
                 t = i / sample_rate
-                # Ket hop nhieu song sin de tao am thanh phong phu
-                value = int(32767 * 0.4 * (
-                    math.sin(2 * math.pi * 440 * t) * 0.5 +   # A4
-                    math.sin(2 * math.pi * 554 * t) * 0.3 +   # C#5
-                    math.sin(2 * math.pi * 659 * t) * 0.2 +   # E5
-                    math.sin(2 * math.pi * 880 * t) * 0.1     # A5
+                # Tao nhieu tan so khac nhau de nghe ro
+                value = int(32767 * 0.3 * (
+                    math.sin(2 * math.pi * 440 * t) * 0.4 +
+                    math.sin(2 * math.pi * 554 * t) * 0.3 +
+                    math.sin(2 * math.pi * 659 * t) * 0.2 +
+                    math.sin(2 * math.pi * 880 * t) * 0.15 +
+                    math.sin(2 * math.pi * 1100 * t) * 0.1 +
+                    math.sin(2 * math.pi * 220 * t) * 0.2
                 ))
                 audio_buffer += struct.pack('<h', value)
             
-            # Tao WAVE header dung dinh dang
             data_size = len(audio_buffer)
             header = b'RIFF'
             header += struct.pack('<I', 36 + data_size)
@@ -143,11 +141,10 @@ class RenderHandler(BaseHTTPRequestHandler):
             
             return header + bytes(audio_buffer)
         except Exception as e:
-            print(f"[!] Loi tao audio default: {e}")
+            print(f"[!] Loi tao audio: {e}")
             return b''
     
     def generate_dashboard(self):
-        """Tao dashboard - DA BO NUT PROXY VA UPLOAD, CAI TIEN HIEU UNG"""
         current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         uptime = time.time() - start_time if 'start_time' in globals() else 0
         uptime_str = time.strftime("%H:%M:%S", time.gmtime(uptime))
@@ -178,131 +175,92 @@ class RenderHandler(BaseHTTPRequestHandler):
                 </div>
             </div>"""
         
-        html_template = """
-<!DOCTYPE html>
+        html_template = """<!DOCTYPE html>
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Garena Checker Bot V6.1 - Dashboard</title>
+<title>GARENA CHECKER - HACKER EDITION</title>
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&display=swap');
+
 * { margin: 0; padding: 0; box-sizing: border-box; }
+
 body {
-    font-family: 'Courier New', monospace;
+    font-family: 'Orbitron', 'Courier New', monospace;
     background: #0a0a0a;
     min-height: 100vh;
     color: #00ff00;
-    padding: 20px;
-    overflow-x: hidden;
+    overflow: hidden;
     user-select: none;
 }
-body::before {
-    content: '';
+
+/* ===== BACKGROUND ANIMATION ===== */
+#bg-canvas {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: linear-gradient(rgba(0,255,0,0.03) 1px, transparent 1px),
-                linear-gradient(90deg, rgba(0,255,0,0.03) 1px, transparent 1px);
-    background-size: 50px 50px;
-    pointer-events: none;
-    z-index: -1;
+    z-index: 0;
+    opacity: 0.3;
 }
-body::after {
-    content: '';
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent,
-        transparent 2px,
-        rgba(0,0,0,0.1) 2px,
-        rgba(0,0,0,0.1) 4px
-    );
-    pointer-events: none;
-    z-index: -1;
-}
+
 #matrix-canvas {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    z-index: -2;
-    opacity: 0.12;
-}
-.container { max-width: 1200px; margin: 0 auto; position: relative; }
-
-/* ========== ANIMATIONS ========== */
-@keyframes glitch {
-    0% { text-shadow: 2px 2px 0 #ff00ff, -2px -2px 0 #00ffff; }
-    25% { text-shadow: -2px 2px 0 #ff00ff, 2px -2px 0 #00ffff; }
-    50% { text-shadow: 2px -2px 0 #ff00ff, -2px 2px 0 #00ffff; }
-    75% { text-shadow: -2px -2px 0 #ff00ff, 2px 2px 0 #00ffff; }
-    100% { text-shadow: 2px 2px 0 #ff00ff, -2px -2px 0 #00ffff; }
-}
-@keyframes flicker { 0%, 100% { opacity: 1; } 50% { opacity: 0.8; } }
-@keyframes pulse {
-    0% { box-shadow: 0 0 20px rgba(0,255,0,0.3); }
-    50% { box-shadow: 0 0 40px rgba(0,255,0,0.8); }
-    100% { box-shadow: 0 0 20px rgba(0,255,0,0.3); }
-}
-@keyframes rotate {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-@keyframes scan {
-    0% { top: -100%; }
-    100% { top: 100%; }
-}
-@keyframes shimmer {
-    0% { transform: translateX(-100%); }
-    100% { transform: translateX(100%); }
-}
-@keyframes bounce {
-    0%, 100% { transform: translateY(0); }
-    50% { transform: translateY(-10px); }
-}
-@keyframes ripple-anim {
-    to { transform: scale(4); opacity: 0; }
-}
-@keyframes glow-pulse {
-    0% { box-shadow: 0 0 5px currentColor; }
-    50% { box-shadow: 0 0 30px currentColor, 0 0 60px currentColor; }
-    100% { box-shadow: 0 0 5px currentColor; }
-}
-@keyframes shake {
-    0%, 100% { transform: translateX(0); }
-    25% { transform: translateX(-5px); }
-    75% { transform: translateX(5px); }
-}
-@keyframes neon-pulse {
-    0%, 100% { border-color: #00ff00; box-shadow: 0 0 20px rgba(0,255,0,0.3); }
-    50% { border-color: #ff00ff; box-shadow: 0 0 40px rgba(255,0,255,0.6); }
+    z-index: 0;
+    opacity: 0.15;
 }
 
-/* ========== HEADER ========== */
+#laser-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 1;
+    pointer-events: none;
+}
+
+/* ===== CONTAINER 3D ===== */
+.container {
+    position: relative;
+    z-index: 2;
+    max-width: 1000px;
+    margin: 20px auto;
+    padding: 30px;
+    perspective: 1200px;
+}
+
+/* ===== HEADER 3D ===== */
 .header {
     text-align: center;
-    padding: 40px 20px;
-    background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #0a0a0a 100%);
+    padding: 40px 30px;
+    background: rgba(0, 0, 0, 0.85);
     border-radius: 20px;
-    margin-bottom: 30px;
     border: 2px solid #00ff00;
-    box-shadow: 0 0 30px rgba(0,255,0,0.3);
+    box-shadow: 0 0 50px rgba(0,255,0,0.2), inset 0 0 50px rgba(0,255,0,0.05);
     position: relative;
     overflow: hidden;
-    transition: all 0.3s ease;
-    cursor: pointer;
+    transform: rotateX(2deg) rotateY(2deg);
+    transition: all 0.5s ease;
+    animation: float3d 6s ease-in-out infinite;
 }
-.header:active {
-    box-shadow: 0 0 60px rgba(0,255,0,0.6);
-    transform: scale(0.99);
+
+.header:hover {
+    transform: rotateX(0deg) rotateY(0deg) scale(1.02);
+    box-shadow: 0 0 80px rgba(0,255,0,0.4), inset 0 0 80px rgba(0,255,0,0.1);
 }
+
+@keyframes float3d {
+    0%, 100% { transform: rotateX(2deg) rotateY(2deg); }
+    50% { transform: rotateX(-2deg) rotateY(-2deg); }
+}
+
 .header::before {
     content: '';
     position: absolute;
@@ -313,184 +271,231 @@ body::after {
     background: conic-gradient(
         from 0deg,
         transparent,
-        rgba(0,255,0,0.1),
+        rgba(0,255,0,0.05),
         transparent,
-        rgba(0,255,0,0.1),
+        rgba(0,255,255,0.05),
+        transparent,
+        rgba(255,0,255,0.05),
         transparent
     );
-    animation: rotate 10s linear infinite;
+    animation: rotate 15s linear infinite;
 }
+
+@keyframes rotate {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .header::after {
     content: '';
     position: absolute;
+    top: 0;
     left: 0;
     width: 100%;
-    height: 50px;
-    background: linear-gradient(transparent, rgba(0,255,0,0.2), transparent);
-    animation: scan 3s linear infinite;
-}
-.header h1 {
-    font-size: 2.5em;
-    color: #00ff00;
-    margin-bottom: 10px;
-    animation: glitch 2s infinite, flicker 3s infinite;
-    position: relative;
-    z-index: 1;
-}
-.header .subtitle { font-size: 1.2em; color: #aaa; margin-bottom: 5px; position: relative; z-index: 1; }
-.header .admin-link { 
-    color: #00ff00; 
-    text-decoration: none; 
-    font-weight: bold; 
-    position: relative; 
-    z-index: 1;
-    transition: all 0.3s ease;
-}
-.header .admin-link:hover { 
-    text-decoration: underline; 
-    color: #ff00ff;
-    text-shadow: 0 0 20px #ff00ff;
+    height: 100%;
+    background: repeating-linear-gradient(
+        0deg,
+        transparent,
+        transparent 2px,
+        rgba(0,255,0,0.03) 2px,
+        rgba(0,255,0,0.03) 4px
+    );
+    pointer-events: none;
 }
 
-/* ========== SOCIAL BUTTONS ========== */
+/* ===== GLITCH TEXT 3D ===== */
+.title {
+    font-size: 3.5em;
+    font-weight: 900;
+    color: #00ff00;
+    text-shadow: 
+        0 0 20px rgba(0,255,0,0.8),
+        0 0 40px rgba(0,255,0,0.5),
+        0 0 80px rgba(0,255,0,0.3),
+        3px 3px 0 #ff00ff,
+        -3px -3px 0 #00ffff;
+    animation: glitch3d 3s infinite, textPulse 2s infinite;
+    position: relative;
+    z-index: 2;
+    transform: translateZ(50px);
+}
+
+@keyframes glitch3d {
+    0%, 100% { 
+        transform: translateZ(50px) skew(0deg);
+        text-shadow: 0 0 20px rgba(0,255,0,0.8), 3px 3px 0 #ff00ff, -3px -3px 0 #00ffff;
+    }
+    20% { 
+        transform: translateZ(50px) skew(2deg);
+        text-shadow: -3px 0 20px #ff0000, 3px 0 20px #00ffff, 0 0 40px #00ff00;
+    }
+    40% { 
+        transform: translateZ(50px) skew(-2deg);
+        text-shadow: 3px 0 20px #ff00ff, -3px 0 20px #ffff00, 0 0 40px #00ff00;
+    }
+    60% { 
+        transform: translateZ(50px) skew(1deg);
+        text-shadow: 0 0 30px #00ff00, 5px 5px 0 #ff00ff, -5px -5px 0 #00ffff;
+    }
+    80% { 
+        transform: translateZ(50px) skew(-1deg);
+        text-shadow: 0 0 30px #00ff00, -5px 5px 0 #ff00ff, 5px -5px 0 #00ffff;
+    }
+}
+
+@keyframes textPulse {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.9; }
+}
+
+.subtitle {
+    font-size: 1.2em;
+    color: #88ff88;
+    text-shadow: 0 0 20px rgba(0,255,0,0.3);
+    animation: flicker 2s infinite;
+    position: relative;
+    z-index: 2;
+}
+
+@keyframes flicker {
+    0%, 100% { opacity: 1; }
+    5% { opacity: 0.5; }
+    10% { opacity: 1; }
+    95% { opacity: 1; }
+    96% { opacity: 0.3; }
+    97% { opacity: 1; }
+}
+
+/* ===== 3D SOCIAL BUTTONS ===== */
 .social-buttons {
     display: flex;
     justify-content: center;
-    gap: 15px;
-    margin-top: 15px;
+    gap: 20px;
+    margin-top: 20px;
     position: relative;
-    z-index: 1;
-    flex-wrap: wrap;
+    z-index: 2;
+    transform: translateZ(30px);
 }
+
 .social-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 10px 20px;
+    gap: 10px;
+    padding: 12px 25px;
     border-radius: 50px;
     font-weight: bold;
     font-size: 1em;
     color: white;
     text-decoration: none;
-    transition: all 0.3s ease;
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     position: relative;
     overflow: hidden;
-    cursor: pointer;
     border: none;
-    outline: none;
-    -webkit-tap-highlight-color: transparent;
+    cursor: pointer;
+    transform: rotateX(5deg) rotateY(5deg);
 }
+
+.social-btn:hover {
+    transform: rotateX(0deg) rotateY(0deg) scale(1.1) translateZ(20px);
+    box-shadow: 0 20px 60px rgba(0,255,0,0.3);
+}
+
 .social-btn.tiktok {
     background: linear-gradient(135deg, #00f2ea, #ff0050);
     box-shadow: 0 0 30px rgba(255,0,80,0.3);
-    animation: pulse 2s infinite;
-}
-.social-btn.tiktok:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 50px rgba(255,0,80,0.6);
-}
-.social-btn.tiktok:active {
-    transform: scale(0.92);
-    box-shadow: 0 0 80px rgba(255,0,80,0.9);
-    animation: glow-pulse 0.4s ease;
-}
-.social-btn.telegram {
-    background: #0088cc;
-    box-shadow: 0 0 30px rgba(0,136,204,0.3);
-    animation: pulse 2s infinite 0.3s;
-}
-.social-btn.telegram:hover {
-    transform: scale(1.1);
-    box-shadow: 0 0 50px rgba(0,136,204,0.6);
-}
-.social-btn.telegram:active {
-    transform: scale(0.92);
-    box-shadow: 0 0 80px rgba(0,136,204,0.9);
-    animation: glow-pulse 0.4s ease;
 }
 
-/* ========== STATUS BADGE ========== */
+.social-btn.telegram {
+    background: linear-gradient(135deg, #0088cc, #004488);
+    box-shadow: 0 0 30px rgba(0,136,204,0.3);
+}
+
+/* ===== STATUS BADGE 3D ===== */
 .status-badge {
     display: inline-block;
-    padding: 10px 20px;
+    padding: 12px 30px;
     border-radius: 50px;
     font-weight: bold;
     font-size: 1.1em;
     margin-top: 15px;
     background: BOT_COLOR;
     color: white;
-    box-shadow: 0 0 20px rgba(0,255,0,0.5);
-    animation: pulse 2s infinite;
+    box-shadow: 0 0 30px rgba(0,255,0,0.5);
+    animation: pulse3d 2s infinite;
     position: relative;
-    z-index: 1;
-    transition: all 0.3s ease;
-    cursor: default;
-}
-.status-badge:active {
-    transform: scale(0.95);
-    box-shadow: 0 0 40px rgba(0,255,0,0.8);
+    z-index: 2;
+    transform: translateZ(40px);
 }
 
-/* ========== AUDIO BUTTON ========== */
-.audio-button {
+@keyframes pulse3d {
+    0%, 100% { transform: translateZ(40px) scale(1); box-shadow: 0 0 30px rgba(0,255,0,0.5); }
+    50% { transform: translateZ(60px) scale(1.05); box-shadow: 0 0 60px rgba(0,255,0,0.8); }
+}
+
+/* ===== AUDIO INDICATOR ===== */
+.audio-indicator {
     display: inline-block;
-    padding: 10px 20px;
+    padding: 8px 20px;
     border-radius: 50px;
-    font-weight: bold;
-    font-size: 1em;
+    font-size: 0.9em;
     margin-top: 10px;
-    margin-left: 10px;
-    background: #ff00ff;
-    color: white;
-    cursor: pointer;
-    box-shadow: 0 0 20px rgba(255,0,255,0.5);
-    animation: pulse 2s infinite 0.6s;
+    background: rgba(0,255,0,0.15);
+    border: 1px solid #00ff00;
+    color: #00ff00;
     position: relative;
-    z-index: 1;
-    border: none;
-    font-family: 'Courier New', monospace;
-    transition: all 0.2s ease;
-    -webkit-tap-highlight-color: transparent;
-    overflow: hidden;
-}
-.audio-button:hover {
-    transform: scale(1.05);
-    box-shadow: 0 0 40px rgba(255,0,255,0.8);
-}
-.audio-button:active {
-    transform: scale(0.88);
-    box-shadow: 0 0 80px rgba(255,0,255,1);
-    animation: glow-pulse 0.3s ease;
-}
-.audio-button .ripple {
-    position: absolute;
-    border-radius: 50%;
-    background: rgba(255,255,255,0.4);
-    transform: scale(0);
-    animation: ripple-anim 0.6s linear;
-    pointer-events: none;
+    z-index: 2;
+    animation: audioPulse 1.5s infinite;
 }
 
-/* ========== STATS GRID ========== */
+.audio-indicator .dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    background: #00ff00;
+    border-radius: 50%;
+    margin-right: 10px;
+    animation: dotPulse 1s infinite;
+}
+
+@keyframes audioPulse {
+    0%, 100% { box-shadow: 0 0 20px rgba(0,255,0,0.2); }
+    50% { box-shadow: 0 0 40px rgba(0,255,0,0.5); }
+}
+
+@keyframes dotPulse {
+    0%, 100% { transform: scale(1); opacity: 1; }
+    50% { transform: scale(1.5); opacity: 0.5; }
+}
+
+/* ===== STATS GRID 3D ===== */
 .stats-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: repeat(4, 1fr);
     gap: 20px;
-    margin-bottom: 30px;
+    margin: 30px 0;
+    transform: translateZ(20px);
 }
+
 .stat-card {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    background: linear-gradient(145deg, rgba(0,255,0,0.05), rgba(0,0,0,0.8));
     border-radius: 15px;
-    padding: 25px;
+    padding: 25px 20px;
     text-align: center;
-    border: 1px solid #00ff00;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
-    transition: all 0.3s ease;
+    border: 1px solid rgba(0,255,0,0.2);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+    transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    transform: rotateX(5deg);
     position: relative;
     overflow: hidden;
-    cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
 }
+
+.stat-card:hover {
+    transform: rotateX(0deg) scale(1.05) translateZ(30px);
+    border-color: #00ff00;
+    box-shadow: 0 20px 50px rgba(0,255,0,0.3);
+}
+
 .stat-card::before {
     content: '';
     position: absolute;
@@ -501,336 +506,488 @@ body::after {
     background: linear-gradient(90deg, transparent, #00ff00, transparent);
     animation: shimmer 2s infinite;
 }
-.stat-card:hover {
-    transform: translateY(-5px) scale(1.02);
-    box-shadow: 0 10px 25px rgba(0,255,0,0.3);
+
+@keyframes shimmer {
+    0% { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
 }
-.stat-card:active {
-    transform: scale(0.95) translateY(-2px);
-    box-shadow: 0 0 50px rgba(0,255,0,0.5);
-    animation: glow-pulse 0.4s ease;
+
+.stat-value {
+    font-size: 2.8em;
+    font-weight: 900;
+    margin-bottom: 8px;
+    text-shadow: 0 0 30px currentColor;
 }
-.stat-card .stat-value { 
-    font-size: 2.5em; 
-    font-weight: bold; 
-    margin-bottom: 10px; 
-    text-shadow: 0 0 10px currentColor;
-    transition: all 0.3s ease;
+
+.stat-label {
+    font-size: 0.8em;
+    color: #88aa88;
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
-.stat-card:active .stat-value {
-    transform: scale(1.2);
-}
-.stat-label { font-size: 0.9em; color: #aaa; text-transform: uppercase; letter-spacing: 1px; }
+
 .stat-hits .stat-value { color: #00ff00; }
-.stat-error .stat-value { color: #ff9800; }
-.stat-checked .stat-value { color: #2196f3; }
-.stat-time .stat-value { color: #ff00ff; font-size: 1.2em; }
+.stat-error .stat-value { color: #ff6b35; }
+.stat-checked .stat-value { color: #00ccff; }
+.stat-time .stat-value { color: #ff00ff; font-size: 1.4em; }
 
-/* ========== SECTION TITLE ========== */
+/* ===== SERVICES 3D ===== */
 .section-title {
-    font-size: 1.5em;
-    color: #00ff00;
-    margin-bottom: 20px;
+    font-size: 2em;
     text-align: center;
-    text-shadow: 0 0 10px rgba(0,255,0,0.5);
+    margin: 30px 0 20px;
+    text-shadow: 0 0 30px rgba(0,255,0,0.3);
     animation: flicker 2s infinite;
+    transform: translateZ(30px);
 }
 
-/* ========== SERVICES GRID ========== */
 .services-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
     gap: 15px;
     margin-bottom: 30px;
+    transform: translateZ(10px);
 }
+
 .service-card {
-    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+    background: linear-gradient(145deg, rgba(0,255,0,0.05), rgba(0,0,0,0.7));
     border-radius: 12px;
     padding: 20px;
     display: flex;
     align-items: center;
     gap: 15px;
-    border: 1px solid #333;
-    transition: all 0.3s ease;
+    border: 1px solid rgba(0,255,0,0.1);
+    transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     cursor: pointer;
-    -webkit-tap-highlight-color: transparent;
     position: relative;
     overflow: hidden;
 }
+
+.service-card:hover {
+    transform: translateZ(30px) scale(1.05);
+    border-color: #00ff00;
+    box-shadow: 0 15px 40px rgba(0,255,0,0.2);
+    background: linear-gradient(145deg, rgba(0,255,0,0.1), rgba(0,0,0,0.8));
+}
+
 .service-card::after {
     content: '';
     position: absolute;
-    top: 50%;
-    left: 50%;
-    width: 0;
-    height: 0;
-    border-radius: 50%;
-    background: rgba(0,255,0,0.15);
-    transform: translate(-50%, -50%);
-    transition: width 0.6s ease, height 0.6s ease;
-    pointer-events: none;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: conic-gradient(
+        from 0deg,
+        transparent,
+        rgba(0,255,0,0.05),
+        transparent,
+        rgba(0,255,255,0.05),
+        transparent
+    );
+    animation: rotate 10s linear infinite;
+    opacity: 0;
+    transition: opacity 0.3s;
 }
-.service-card:active::after {
-    width: 400px;
-    height: 400px;
-}
-.service-card:hover {
-    border-color: #00ff00;
-    box-shadow: 0 0 20px rgba(0,255,0,0.3);
-    transform: scale(1.05);
-}
-.service-card:active {
-    transform: scale(0.92);
-    border-color: #ff00ff;
-    box-shadow: 0 0 40px rgba(255,0,255,0.5);
-    animation: glow-pulse 0.3s ease;
-}
-.service-card .service-icon { font-size: 2em; animation: bounce 2s infinite; }
-.service-card .service-info { flex: 1; }
-.service-card .service-name { font-size: 1.1em; font-weight: bold; color: #fff; margin-bottom: 5px; }
-.service-card .service-desc { font-size: 0.85em; color: #aaa; }
 
-/* ========== FOOTER ========== */
+.service-card:hover::after {
+    opacity: 1;
+}
+
+.service-icon {
+    font-size: 2.2em;
+    animation: bounce 2s infinite;
+    position: relative;
+    z-index: 2;
+}
+
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-8px); }
+}
+
+.service-info {
+    flex: 1;
+    position: relative;
+    z-index: 2;
+}
+
+.service-name {
+    font-size: 1.1em;
+    font-weight: 700;
+    color: #fff;
+    margin-bottom: 3px;
+}
+
+.service-desc {
+    font-size: 0.75em;
+    color: #88aa88;
+}
+
+/* ===== FOOTER ===== */
 .footer {
     text-align: center;
     padding: 20px;
-    color: #666;
-    font-size: 0.9em;
-    border-top: 1px solid #333;
-    margin-top: 30px;
+    color: #446644;
+    font-size: 0.8em;
+    border-top: 1px solid rgba(0,255,0,0.1);
+    margin-top: 20px;
+    transform: translateZ(10px);
 }
-.footer a { 
-    color: #00ff00; 
+
+.footer a {
+    color: #00ff00;
     text-decoration: none;
-    transition: all 0.3s ease;
+    transition: all 0.3s;
 }
+
 .footer a:hover {
     color: #ff00ff;
     text-shadow: 0 0 20px #ff00ff;
 }
-.uptime { margin-top: 10px; color: #aaa; font-size: 0.9em; }
 
-/* ========== TOAST NOTIFICATION ========== */
-.toast {
-    position: fixed;
-    bottom: 30px;
-    left: 50%;
-    transform: translateX(-50%) translateY(100px);
-    background: rgba(0,0,0,0.9);
-    color: #00ff00;
-    padding: 15px 30px;
-    border-radius: 10px;
-    border: 1px solid #00ff00;
-    box-shadow: 0 0 30px rgba(0,255,0,0.3);
-    font-family: 'Courier New', monospace;
-    font-size: 0.9em;
-    opacity: 0;
-    transition: all 0.5s ease;
-    z-index: 999;
-    pointer-events: none;
-}
-.toast.show {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-}
-
-/* ========== RESPONSIVE ========== */
+/* ===== RESPONSIVE ===== */
 @media (max-width: 768px) {
-    .header h1 { font-size: 1.8em; }
+    .title { font-size: 2em; }
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .services-grid { grid-template-columns: 1fr; }
     .social-buttons { flex-direction: column; align-items: center; }
-    .audio-button { margin-left: 0; }
+    .header { padding: 20px; }
+    .container { padding: 15px; margin: 10px; }
+}
+
+@media (max-width: 480px) {
+    .title { font-size: 1.5em; }
+    .stats-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+    .stat-value { font-size: 2em; }
 }
 </style>
 </head>
 <body>
+
+<!-- ===== CANVAS BACKGROUNDS ===== -->
+<canvas id="bg-canvas"></canvas>
 <canvas id="matrix-canvas"></canvas>
+<canvas id="laser-canvas"></canvas>
+
+<!-- ===== CONTAINER ===== -->
 <div class="container">
-    <div class="header" id="header">
-        <h1>🎮 GARENA CHECKER BOT</h1>
-        <div class="subtitle">Version 6.1 - BREAKTHROUGH</div>
-        <div class="subtitle">Admin: <a href="https://t.me/baohuyno1" class="admin-link">@baohuyno1</a></div>
+    <div class="header">
+        <div class="title">🎮 GARENA CHECKER</div>
+        <div class="subtitle">Version 6.1 - HACKER EDITION</div>
+        <div class="subtitle">Admin: <a href="https://t.me/baohuyno1" style="color:#00ff00;text-decoration:none;">@baohuyno1</a></div>
+        
         <div class="social-buttons">
-            <a href="https://tiktok.com/@baohuy1109" target="_blank" class="social-btn tiktok" id="tiktok-btn">🎵 TikTok @baohuy1109</a>
-            <a href="https://t.me/baohuyno1" target="_blank" class="social-btn telegram" id="telegram-btn">✈️ Telegram</a>
+            <a href="https://tiktok.com/@baohuy1109" target="_blank" class="social-btn tiktok">🎵 TikTok @baohuy1109</a>
+            <a href="https://t.me/baohuyno1" target="_blank" class="social-btn telegram">✈️ Telegram</a>
         </div>
+        
         <div class="status-badge" id="status-badge" style="background: BOT_COLOR;">🔴 San sang</div>
-        <button class="audio-button" id="audio-btn">🔊 BAT AM THANH</button>
-        <div class="uptime">⏱ Uptime: UPTIME_PLACEHOLDER</div>
+        <div class="audio-indicator"><span class="dot"></span> 🔊 AM THANH DANG PHAT</div>
+        <div class="subtitle" style="font-size:0.8em;color:#446644;margin-top:5px;">⏱ Uptime: UPTIME_PLACEHOLDER</div>
     </div>
     
+    <!-- ===== STATS ===== -->
     <div class="stats-grid">
-        <div class="stat-card stat-hits" id="stat-hits"><div class="stat-value">HITS_PLACEHOLDER</div><div class="stat-label">✅ Hits</div></div>
-        <div class="stat-card stat-error" id="stat-error"><div class="stat-value">ERROR_PLACEHOLDER</div><div class="stat-label">⚠️ Errors</div></div>
-        <div class="stat-card stat-checked" id="stat-checked"><div class="stat-value">CHECKED_PLACEHOLDER</div><div class="stat-label">🔄 Checked</div></div>
-        <div class="stat-card stat-time" id="stat-time"><div class="stat-value">CURRENT_TIME_PLACEHOLDER</div><div class="stat-label">📅 Thoi gian</div></div>
+        <div class="stat-card stat-hits"><div class="stat-value">HITS_PLACEHOLDER</div><div class="stat-label">✅ Hits</div></div>
+        <div class="stat-card stat-error"><div class="stat-value">ERROR_PLACEHOLDER</div><div class="stat-label">⚠️ Errors</div></div>
+        <div class="stat-card stat-checked"><div class="stat-value">CHECKED_PLACEHOLDER</div><div class="stat-label">🔄 Checked</div></div>
+        <div class="stat-card stat-time"><div class="stat-value">CURRENT_TIME_PLACEHOLDER</div><div class="stat-label">📅 Thoi gian</div></div>
     </div>
     
+    <!-- ===== SERVICES ===== -->
     <div class="section-title">📋 DICH VU HO TRO</div>
-    <div class="services-grid" id="services-grid">
+    <div class="services-grid">
         SERVICES_HTML_PLACEHOLDER
     </div>
     
     <div class="footer">
         <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> - All rights reserved</p>
-        <p>Garena Checker Bot V6.1 - Render Web Service</p>
+        <p style="color:#334433;font-size:0.7em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO</p>
     </div>
 </div>
 
-<audio id="background-audio" loop><source src="/audio" type="audio/wav"></audio>
-
-<!-- Toast Notification -->
-<div class="toast" id="toast"></div>
+<!-- ===== AUDIO - SU DUNG NHIEU CACH DE DAM BAO PHAT ===== -->
+<audio id="bg-audio" loop autoplay>
+    <source src="/audio" type="audio/wav">
+    <source src="/audio.mp3" type="audio/mpeg">
+</audio>
 
 <script>
 // ========================================================================
-// MATRIX EFFECT
+// 1. 3D BACKGROUND EFFECT
 // ========================================================================
-const canvas = document.getElementById('matrix-canvas');
-const ctx = canvas.getContext('2d');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
-const matrixChars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789@#$%^&*()_+{}[]|;:,.<>?/~`';
+const bgCanvas = document.getElementById('bg-canvas');
+const bgCtx = bgCanvas.getContext('2d');
+bgCanvas.width = window.innerWidth;
+bgCanvas.height = window.innerHeight;
+
+let particles = [];
+const PARTICLE_COUNT = 150;
+
+class Particle {
+    constructor() {
+        this.reset();
+    }
+    reset() {
+        this.x = Math.random() * bgCanvas.width;
+        this.y = Math.random() * bgCanvas.height;
+        this.z = Math.random() * 300 + 50;
+        this.size = Math.random() * 3 + 1;
+        this.speed = Math.random() * 0.5 + 0.1;
+        this.color = `hsl(${120 + Math.random() * 60}, 100%, ${40 + Math.random() * 30}%)`;
+        this.opacity = Math.random() * 0.8 + 0.2;
+    }
+    update() {
+        this.z -= this.speed;
+        if (this.z < 10) this.reset();
+        const scale = 300 / this.z;
+        this.sx = this.x * scale + bgCanvas.width/2 - this.x;
+        this.sy = this.y * scale + bgCanvas.height/2 - this.y;
+        this.ssize = this.size * scale;
+    }
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.globalAlpha = this.opacity * (300 / this.z);
+        ctx.beginPath();
+        ctx.arc(this.sx, this.sy, this.ssize, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+    }
+}
+
+for (let i = 0; i < PARTICLE_COUNT; i++) {
+    particles.push(new Particle());
+}
+
+function drawBg() {
+    bgCtx.fillStyle = 'rgba(10, 10, 10, 0.3)';
+    bgCtx.fillRect(0, 0, bgCanvas.width, bgCanvas.height);
+    for (const p of particles) {
+        p.update();
+        p.draw(bgCtx);
+    }
+    requestAnimationFrame(drawBg);
+}
+drawBg();
+
+// ========================================================================
+// 2. MATRIX EFFECT
+// ========================================================================
+const matrixCanvas = document.getElementById('matrix-canvas');
+const matrixCtx = matrixCanvas.getContext('2d');
+matrixCanvas.width = window.innerWidth;
+matrixCanvas.height = window.innerHeight;
+
+const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}[]|;:,.<>?~';
 const fontSize = 14;
-const columns = canvas.width / fontSize;
+const columns = Math.ceil(matrixCanvas.width / fontSize);
 const drops = [];
-for (let i = 0; i < columns; i++) { drops[i] = Math.random() * -100; }
+for (let i = 0; i < columns; i++) {
+    drops[i] = Math.random() * -100;
+}
+
 function drawMatrix() {
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.05)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = '#00ff00';
-    ctx.font = fontSize + 'px monospace';
+    matrixCtx.fillStyle = 'rgba(0, 0, 0, 0.05)';
+    matrixCtx.fillRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+    
     for (let i = 0; i < drops.length; i++) {
-        const text = matrixChars.charAt(Math.floor(Math.random() * matrixChars.length));
-        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-        if (drops[i] * fontSize > canvas.height && Math.random() > 0.975) { drops[i] = 0; }
+        const text = chars[Math.floor(Math.random() * chars.length)];
+        const bright = Math.random() > 0.9 ? '#ffffff' : '#00ff00';
+        matrixCtx.fillStyle = bright;
+        matrixCtx.font = fontSize + 'px monospace';
+        matrixCtx.fillText(text, i * fontSize, drops[i] * fontSize);
+        
+        if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) {
+            drops[i] = 0;
+        }
         drops[i]++;
     }
 }
 setInterval(drawMatrix, 50);
-window.addEventListener('resize', () => {
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-});
 
 // ========================================================================
-// TOAST NOTIFICATION
+// 3. LASER EFFECT
 // ========================================================================
-function showToast(message, duration = 2000) {
-    const toast = document.getElementById('toast');
-    toast.textContent = message;
-    toast.classList.add('show');
-    clearTimeout(toast._hideTimeout);
-    toast._hideTimeout = setTimeout(() => {
-        toast.classList.remove('show');
-    }, duration);
+const laserCanvas = document.getElementById('laser-canvas');
+const laserCtx = laserCanvas.getContext('2d');
+laserCanvas.width = window.innerWidth;
+laserCanvas.height = window.innerHeight;
+
+const laserColors = ['#00ff00', '#00ffff', '#ff00ff', '#ffff00', '#ff4444', '#44ff44', '#ff8800'];
+let lasers = [];
+
+class LaserBeam {
+    constructor(x, y) {
+        this.x = x || Math.random() * laserCanvas.width;
+        this.y = y || Math.random() * laserCanvas.height;
+        this.tx = Math.random() * laserCanvas.width;
+        this.ty = Math.random() * laserCanvas.height;
+        this.color = laserColors[Math.floor(Math.random() * laserColors.length)];
+        this.width = Math.random() * 2 + 0.5;
+        this.life = 0;
+        this.maxLife = Math.random() * 60 + 30;
+        this.particles = [];
+    }
+    update() {
+        this.life++;
+        if (Math.random() > 0.4) {
+            this.particles.push({
+                x: this.x + (this.tx - this.x) * Math.random(),
+                y: this.y + (this.ty - this.y) * Math.random(),
+                vx: (Math.random() - 0.5) * 2,
+                vy: (Math.random() - 0.5) * 2,
+                life: 0,
+                maxLife: Math.random() * 20 + 10
+            });
+        }
+        for (let i = this.particles.length - 1; i >= 0; i--) {
+            const p = this.particles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life++;
+            if (p.life > p.maxLife) this.particles.splice(i, 1);
+        }
+        if (this.life > this.maxLife) {
+            const idx = lasers.indexOf(this);
+            if (idx > -1) lasers.splice(idx, 1);
+        }
+    }
+    draw(ctx) {
+        const progress = this.life / this.maxLife;
+        const alpha = progress < 0.1 ? progress * 10 : progress > 0.9 ? (1 - progress) * 10 : 1;
+        const grad = ctx.createLinearGradient(this.x, this.y, this.tx, this.ty);
+        grad.addColorStop(0, this.color + '00');
+        grad.addColorStop(0.5, this.color + 'FF');
+        grad.addColorStop(1, this.color + '00');
+        ctx.strokeStyle = grad;
+        ctx.lineWidth = this.width;
+        ctx.globalAlpha = alpha;
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 15;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(this.tx, this.ty);
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+        for (const p of this.particles) {
+            const pa = 1 - (p.life / p.maxLife);
+            ctx.fillStyle = this.color;
+            ctx.globalAlpha = pa * alpha;
+            ctx.shadowColor = this.color;
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, Math.random() * 2 + 1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+        ctx.globalAlpha = 1;
+    }
 }
 
-// ========================================================================
-// AUDIO CONTROL - FIX: dam bao phat duoc
-// ========================================================================
-let audioEnabled = false;
-const audio = document.getElementById('background-audio');
-const audioBtn = document.getElementById('audio-btn');
+function createLaser(x, y) {
+    if (lasers.length < 80) lasers.push(new LaserBeam(x, y));
+}
 
-// Tai lai audio neu gap loi
-audio.addEventListener('error', function(e) {
-    console.log('Audio error, reloading...');
-    audio.load();
-    showToast('⚠️ Loi audio, dang tai lai...', 1500);
+function drawLasers() {
+    laserCtx.clearRect(0, 0, laserCanvas.width, laserCanvas.height);
+    for (const l of lasers) {
+        l.update();
+        l.draw(laserCtx);
+    }
+    if (Math.random() > 0.97) {
+        const fx = Math.random() * laserCanvas.width;
+        const fy = Math.random() * laserCanvas.height;
+        const fr = Math.random() * 40 + 20;
+        const fc = laserColors[Math.floor(Math.random() * laserColors.length)];
+        const g = laserCtx.createRadialGradient(fx, fy, 0, fx, fy, fr);
+        g.addColorStop(0, fc + 'FF');
+        g.addColorStop(1, fc + '00');
+        laserCtx.fillStyle = g;
+        laserCtx.beginPath();
+        laserCtx.arc(fx, fy, fr, 0, Math.PI * 2);
+        laserCtx.fill();
+    }
+    requestAnimationFrame(drawLasers);
+}
+
+for (let i = 0; i < 20; i++) createLaser();
+drawLasers();
+
+// Mouse laser
+document.addEventListener('mousemove', function(e) {
+    if (Math.random() > 0.85) {
+        createLaser(e.clientX, e.clientY);
+        if (lasers.length > 80) lasers.shift();
+    }
 });
 
-function toggleAudio() {
-    if (audioEnabled) {
-        audio.pause();
-        audioBtn.textContent = '🔊 BAT AM THANH';
-        audioEnabled = false;
-        createRipple(audioBtn);
-        showToast('🔇 Da tat am thanh', 1000);
-    } else {
-        audio.load();
-        audio.play().then(() => {
-            audioBtn.textContent = '🔇 TAT AM THANH';
-            audioEnabled = true;
-            createRipple(audioBtn);
-            showToast('🔊 Da bat am thanh', 1000);
-        }).catch(e => {
-            console.log('Audio play error:', e);
-            // Thu lai voi cach khac
-            audio.muted = true;
-            audio.play().then(() => {
-                audio.muted = false;
-                audioBtn.textContent = '🔇 TAT AM THANH';
-                audioEnabled = true;
-                createRipple(audioBtn);
-                showToast('🔊 Da bat am thanh (che do fallback)', 1500);
-            }).catch(e2 => {
-                showToast('❌ Khong the phat audio. Vui long kiem tra ket noi.', 2000);
-            });
+document.addEventListener('click', function(e) {
+    for (let i = 0; i < 8; i++) {
+        createLaser(e.clientX, e.clientY);
+    }
+    if (lasers.length > 80) lasers.splice(0, 8);
+});
+
+// ========================================================================
+// 4. AUDIO - FIX: DAM BAO PHAT BANG NHIEU CACH
+// ========================================================================
+const audio = document.getElementById('bg-audio');
+
+// Cach 1: Auto play truc tiep
+function playAudioDirect() {
+    audio.volume = 0.3;
+    audio.loop = true;
+    const promise = audio.play();
+    if (promise) {
+        promise.then(() => {
+            console.log('🎵 Audio playing successfully!');
+            document.querySelector('.audio-indicator').innerHTML = '<span class="dot"></span> 🔊 AM THANH DANG PHAT';
+        }).catch((e) => {
+            console.log('Auto-play blocked, using fallback...');
+            // Cach 2: Fallback voi user interaction
+            document.addEventListener('click', function playOnce() {
+                audio.play().then(() => {
+                    console.log('🎵 Audio playing after click!');
+                    document.querySelector('.audio-indicator').innerHTML = '<span class="dot"></span> 🔊 AM THANH DANG PHAT';
+                }).catch(() => {});
+                document.removeEventListener('click', playOnce);
+            }, { once: true });
+            
+            // Cach 3: Tao audio context de phat
+            try {
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                const ctx = new AudioContext();
+                if (ctx.state === 'suspended') {
+                    ctx.resume().then(() => {
+                        audio.play().catch(() => {});
+                    });
+                }
+            } catch(e) {}
         });
     }
 }
 
-audioBtn.addEventListener('click', toggleAudio);
-
-// Tu dong bat audio khi nguoi dung tuong tac lan dau
-document.addEventListener('click', function firstInteraction() {
-    if (!audioEnabled && !audio.paused) {
-        audio.play().catch(() => {});
-    }
-}, { once: true });
-
-// ========================================================================
-// RIPPLE EFFECT
-// ========================================================================
-function createRipple(element) {
-    const ripple = document.createElement('span');
-    const rect = element.getBoundingClientRect();
-    const size = Math.max(rect.width, rect.height);
-    const x = (event ? event.clientX - rect.left : rect.width/2) - size/2;
-    const y = (event ? event.clientY - rect.top : rect.height/2) - size/2;
-    ripple.style.width = ripple.style.height = size + 'px';
-    ripple.style.left = x + 'px';
-    ripple.style.top = y + 'px';
-    ripple.style.position = 'absolute';
-    ripple.style.borderRadius = '50%';
-    ripple.style.background = 'rgba(255,255,255,0.4)';
-    ripple.style.transform = 'scale(0)';
-    ripple.style.animation = 'ripple-anim 0.6s linear';
-    ripple.style.pointerEvents = 'none';
-    element.style.position = 'relative';
-    element.style.overflow = 'hidden';
-    element.appendChild(ripple);
-    setTimeout(() => ripple.remove(), 600);
-}
-
-// Them ripple cho tat ca cac nut
-document.querySelectorAll('.audio-button, .social-btn, .stat-card, .service-card, .status-badge, .header').forEach(el => {
-    el.addEventListener('click', function(e) {
-        const rect = this.getBoundingClientRect();
-        const size = Math.max(rect.width, rect.height);
-        const x = (e.clientX - rect.left) - size/2;
-        const y = (e.clientY - rect.top) - size/2;
-        const ripple = document.createElement('span');
-        ripple.style.width = ripple.style.height = size + 'px';
-        ripple.style.left = x + 'px';
-        ripple.style.top = y + 'px';
-        ripple.style.position = 'absolute';
-        ripple.style.borderRadius = '50%';
-        ripple.style.background = 'rgba(255,255,255,0.3)';
-        ripple.style.transform = 'scale(0)';
-        ripple.style.animation = 'ripple-anim 0.6s linear';
-        ripple.style.pointerEvents = 'none';
-        this.style.position = 'relative';
-        this.style.overflow = 'hidden';
-        this.appendChild(ripple);
-        setTimeout(() => ripple.remove(), 600);
-    });
+// Reload neu loi
+audio.addEventListener('error', function() {
+    console.log('Audio error, reloading...');
+    audio.load();
+    setTimeout(playAudioDirect, 500);
 });
 
+// Khoi dong am thanh
+setTimeout(playAudioDirect, 300);
+
+// Kiem tra trang thai audio
+setInterval(() => {
+    if (audio.paused && !audio.ended) {
+        console.log('Audio paused, trying to resume...');
+        audio.play().catch(() => {});
+    }
+}, 5000);
+
 // ========================================================================
-// STATS UPDATE
+// 5. STATS UPDATE
 // ========================================================================
 function updateStats() {
     fetch('/stats').then(r => r.json()).then(d => {
@@ -839,68 +996,46 @@ function updateStats() {
         document.querySelector('.stat-checked .stat-value').textContent = d.stats?.checked || 0;
         document.querySelector('.stat-time .stat-value').textContent = new Date().toLocaleTimeString('vi-VN');
         const badge = document.getElementById('status-badge');
-        const isChecking = d.checking;
-        badge.textContent = isChecking ? '🔴 Dang check' : '🟢 San sang';
-        badge.style.background = isChecking ? '#ff9800' : '#4caf50';
+        badge.textContent = d.checking ? '🔴 Dang check' : '🟢 San sang';
+        badge.style.background = d.checking ? '#ff9800' : '#4caf50';
     }).catch(e => console.log('Error:', e));
 }
 setInterval(updateStats, 5000);
 updateStats();
 
 // ========================================================================
-// SERVICE CLICK - HIEU UNG + TOAST
+// 6. SERVICE CLICK 3D
 // ========================================================================
 document.querySelectorAll('.service-card').forEach(card => {
     card.addEventListener('click', function() {
-        const service = this.dataset.service;
         const name = this.querySelector('.service-name').textContent;
-        // Hieu ung xac nhan
         this.style.borderColor = '#ff00ff';
-        this.style.boxShadow = '0 0 40px rgba(255,0,255,0.6)';
+        this.style.boxShadow = '0 0 60px rgba(255,0,255,0.6)';
+        this.style.transform = 'translateZ(50px) scale(1.1)';
         setTimeout(() => {
-            this.style.borderColor = '#333';
+            this.style.borderColor = 'rgba(0,255,0,0.1)';
             this.style.boxShadow = 'none';
+            this.style.transform = '';
         }, 500);
-        showToast(`📋 Da chon service: ${name}`, 1500);
-        console.log('Service clicked:', service);
+        console.log('Service:', name);
     });
 });
 
 // ========================================================================
-= HEADER CLICK - HIEU UNG
+// 7. RESIZE
 // ========================================================================
-document.getElementById('header').addEventListener('click', function() {
-    this.style.boxShadow = '0 0 80px rgba(0,255,0,0.8)';
-    setTimeout(() => {
-        this.style.boxShadow = '0 0 30px rgba(0,255,0,0.3)';
-    }, 300);
-    showToast('🚀 Garena Checker Bot V6.1', 1000);
+window.addEventListener('resize', () => {
+    bgCanvas.width = window.innerWidth;
+    bgCanvas.height = window.innerHeight;
+    matrixCanvas.width = window.innerWidth;
+    matrixCanvas.height = window.innerHeight;
+    laserCanvas.width = window.innerWidth;
+    laserCanvas.height = window.innerHeight;
 });
 
-// ========================================================================
-// SOCIAL BUTTONS - FEEDBACK
-// ========================================================================
-document.getElementById('tiktok-btn').addEventListener('click', function(e) {
-    createRipple(this);
-    showToast('🎵 Dang mo TikTok...', 1000);
-});
-document.getElementById('telegram-btn').addEventListener('click', function(e) {
-    createRipple(this);
-    showToast('✈️ Dang mo Telegram...', 1000);
-});
-
-// ========================================================================
-// STAT CARDS - FEEDBACK
-// ========================================================================
-document.querySelectorAll('.stat-card').forEach(card => {
-    card.addEventListener('click', function() {
-        const label = this.querySelector('.stat-label').textContent;
-        const value = this.querySelector('.stat-value').textContent;
-        showToast(`📊 ${label}: ${value}`, 1500);
-    });
-});
-
-console.log('Dashboard loaded - All effects enabled!');
+console.log('🔥 GARENA CHECKER HACKER EDITION LOADED!');
+console.log('💀 3D Effects - Laser - Matrix - Auto Audio');
+console.log('🎵 Audio should be playing now!');
 </script>
 </body>
 </html>"""
@@ -923,7 +1058,6 @@ console.log('Dashboard loaded - All effects enabled!');
 def start_render_server():
     global start_time
     start_time = time.time()
-    # Load audio custom neu co
     global CUSTOM_AUDIO_DATA
     if os.path.exists(CUSTOM_AUDIO_PATH):
         try:
@@ -939,7 +1073,9 @@ def start_render_server():
         print(f"[*] Render web server chay tren port {port}")
         print(f"[*] Dashboard: http://0.0.0.0:{port}")
         print(f"[*] Audio: http://0.0.0.0:{port}/audio")
-        print(f"[*] Upload audio chi ho tro qua Telegram (admin)")
+        print(f"[*] HIEU UNG 3D + HACKER DEP")
+        print(f"[*] AM THANH TU DONG PHAT")
+        print(f"[*] DA BO LENH /hits VA /report")
         server.serve_forever()
     except Exception as e:
         print(f"[!] Loi web server: {e}")
@@ -1368,23 +1504,9 @@ def save_loc_file(accounts):
             for user, pwd in accounts:
                 f.write(f"{user}:{pwd}\n")
 
+# KHONG LUU KET QUA
 def save_result(username, password, status, service=""):
-    with file_lock:
-        if status == "hit":
-            with open(OUTPUT_HITS, 'a', encoding='utf-8') as f:
-                f.write(f"{username}:{password}\n")
-        elif status == "dead":
-            with open(OUTPUT_DEAD, 'a', encoding='utf-8') as f:
-                f.write(f"{username}:{password}\n")
-        elif status == "unknown":
-            with open(OUTPUT_UNKNOWN, 'a', encoding='utf-8') as f:
-                f.write(f"{username}:{password}\n")
-        else:
-            with open(OUTPUT_ERROR, 'a', encoding='utf-8') as f:
-                f.write(f"{username}:{password}\n")
-        
-        with open(OUTPUT_RESULT, 'a', encoding='utf-8') as f:
-            f.write(f"{username}:{password}|{status}|{service}\n")
+    pass
 
 def format_value(value):
     if isinstance(value, bool):
@@ -1716,8 +1838,6 @@ def check_single(chat_id, username, password, service="lienquan"):
     result = check_account_api(username, password, service, use_delay=False)
     result_type = result.get("result", "unknown")
     
-    save_result(username, password, result_type, service)
-    
     if result_type == "hit":
         hit_msg = format_hit_info(username, password, service, result)
         safe_send_message(chat_id, hit_msg)
@@ -1775,8 +1895,6 @@ def check_batch(chat_id, accounts, service):
         
         result = check_account_api(user, pwd, service, use_delay=False)
         result_type = result.get("result", "unknown")
-        
-        save_result(user, pwd, result_type, service)
         
         with stats_lock:
             stats["checked"] += 1
@@ -1839,13 +1957,6 @@ def check_batch(chat_id, accounts, service):
 ⚠️ ERROR: <code>{stats['errors']}</code>
 ⏱ Thoi gian: <code>{elapsed:.1f}s</code>
 """)
-    
-    if stats["hits"] > 0 and os.path.exists(OUTPUT_HITS):
-        with open(OUTPUT_HITS, 'rb') as f:
-            try:
-                bot.send_document(chat_id, f, caption=f"✅ hits.txt ({stats['hits']} acc)")
-            except:
-                pass
 
 def check_all_services(chat_id, accounts):
     global checking
@@ -1887,8 +1998,6 @@ def check_all_services(chat_id, accounts):
         
         result = check_account_api(user, pwd, service, use_delay=False)
         result_type = result.get("result", "unknown")
-        
-        save_result(user, pwd, result_type, service)
         
         with stats_lock:
             stats_all["checked"] += 1
@@ -1959,35 +2068,27 @@ def check_all_services(chat_id, accounts):
 ⏱ Time: {elapsed:.1f}s
 """)
 
-# ========== LENH UPLOAD AUDIO - ADMIN ONLY ==========
+# ========== LENH ==========
 @bot.message_handler(commands=['upaudio'])
 def cmd_upaudio(message):
-    """Lenh up audio - chi admin moi duoc dung"""
     if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "❌ Ban khong co quyen su dung lenh nay!")
+        safe_send_message(message.chat.id, "❌ Ban khong co quyen!")
         return
     
     safe_send_message(message.chat.id, """
-🎵 <b>UPLOAD AUDIO - ADMIN ONLY</b>
-
-<b>Cach dung:</b>
-1. Gui file audio (.wav hoac .mp3) truc tiep vao bot
-2. Hoac gui file .wav/.mp3 qua document
-
-Bot se tu dong cap nhat audio moi cho dashboard.
+🎵 <b>UPLOAD AUDIO - ADMIN</b>
+Gui file .wav hoac .mp3 vao bot
 """)
 
 @bot.message_handler(content_types=['audio'])
 def handle_audio_upload(message):
-    """Xu ly upload audio tu admin"""
     if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "❌ Ban khong co quyen upload audio!")
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
     
     global CUSTOM_AUDIO_DATA
     
     try:
-        # Lay file audio tu Telegram
         file_info = bot.get_file(message.audio.file_id)
         audio_data = bot.download_file(file_info.file_path)
         
@@ -1995,41 +2096,32 @@ def handle_audio_upload(message):
             safe_send_message(message.chat.id, "❌ Khong the tai audio!")
             return
         
-        # Kiem tra kich thuoc (gioi han 20MB)
         if len(audio_data) > 20 * 1024 * 1024:
-            safe_send_message(message.chat.id, "❌ File audio qua lon! Gioi han 20MB.")
+            safe_send_message(message.chat.id, "❌ File qua lon! Gioi han 20MB.")
             return
         
-        # Luu vao bien toan cuc va file
         with AUDIO_LOCK:
             CUSTOM_AUDIO_DATA = audio_data
         
-        # Luu vao file de dung sau
         with open(CUSTOM_AUDIO_PATH, 'wb') as f:
             f.write(audio_data)
         
-        # Thong tin audio
         duration = message.audio.duration if message.audio.duration else 0
         file_size_mb = len(audio_data) / (1024 * 1024)
         
         safe_send_message(message.chat.id, f"""
-✅ <b>UPLOAD AUDIO THANH CONG!</b>
-
-📁 Ten file: <code>{message.audio.file_name or 'audio'}</code>
-⏱ Thoi luong: <code>{duration}s</code>
-📦 Kich thuoc: <code>{file_size_mb:.2f} MB</code>
-
-Audio da duoc cap nhat tren dashboard!
+✅ UPLOAD AUDIO THANH CONG!
+📁 Ten: {message.audio.file_name or 'audio'}
+⏱ {duration}s | 📦 {file_size_mb:.2f} MB
 """)
         
     except Exception as e:
-        safe_send_message(message.chat.id, f"❌ Loi upload audio: {e}")
+        safe_send_message(message.chat.id, f"❌ Loi: {e}")
 
 @bot.message_handler(commands=['delaudio'])
 def cmd_delaudio(message):
-    """Xoa audio custom - chi admin"""
     if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "❌ Ban khong co quyen su dung lenh nay!")
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
     
     global CUSTOM_AUDIO_DATA
@@ -2037,40 +2129,13 @@ def cmd_delaudio(message):
     with AUDIO_LOCK:
         CUSTOM_AUDIO_DATA = None
     
-    # Xoa file audio neu co
     try:
         if os.path.exists(CUSTOM_AUDIO_PATH):
             os.remove(CUSTOM_AUDIO_PATH)
     except:
         pass
     
-    safe_send_message(message.chat.id, "✅ Da xoa audio custom! Dashboard se dung audio mac dinh.")
-
-@bot.message_handler(commands=['checkaudio'])
-def cmd_checkaudio(message):
-    """Kiem tra trang thai audio - chi admin"""
-    if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "❌ Ban khong co quyen su dung lenh nay!")
-        return
-    
-    with AUDIO_LOCK:
-        if CUSTOM_AUDIO_DATA:
-            audio_size = len(CUSTOM_AUDIO_DATA)
-            audio_size_mb = audio_size / (1024 * 1024)
-            safe_send_message(message.chat.id, f"""
-🎵 <b>TRANG THAI AUDIO</b>
-
-📦 Kich thuoc: <code>{audio_size_mb:.2f} MB</code>
-📁 File: <code>{CUSTOM_AUDIO_PATH}</code>
-✅ Trang thai: <b>DANG SU DUNG CUSTOM AUDIO</b>
-""")
-        else:
-            safe_send_message(message.chat.id, """
-🎵 <b>TRANG THAI AUDIO</b>
-
-❌ Chua co custom audio
-✅ Dashboard dang dung audio mac dinh
-""")
+    safe_send_message(message.chat.id, "✅ Da xoa audio custom!")
 
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
@@ -2078,28 +2143,20 @@ def cmd_start(message):
         return
     
     safe_send_message(message.chat.id, f"""
-🤖 <b>GARENA CHECKER BOT V6.1 - BREAKTHROUGH</b>
+🤖 <b>GARENA CHECKER BOT V6.1 - HACKER EDITION</b>
 👤 Admin: @baohuyno1
 🎵 TikTok: @baohuy1109
 
-📌 <b>LENH SU DUNG:</b>
-
-<b>CHECK TAI KHOAN:</b>
+📌 <b>LENH:</b>
 /check user:pass - Check 1 acc
-/check user|pass - Check 1 acc
-/check user:pass service - Check 1 acc theo service
-/checkmulti user1:pass1,user2:pass2 - Check nhieu acc
-/checkall - Check tat ca acc dang cho
-
-<b>SERVICE:</b>
-lienquan, miniworld, blockmango, deltaforce, hotmail, fc, fullpack
-
-<b>KHAC:</b>
+/checkmulti user1:pass1,user2:pass2 - Check nhieu
+/checkall - Check tat ca
 /services - Danh sach service
-/hits - File hits
-/loc - File loc accounts
-/report - File report
 /stop - Dung check
+
+⚠️ <b>KHONG LUU ACCOUNT!</b>
+🔊 AM THANH TU DONG PHAT TREN WEB!
+🚫 DA BO LENH /hits VA /report
 """)
 
 @bot.message_handler(commands=['check'])
@@ -2109,30 +2166,21 @@ def cmd_check(message):
     
     parts = message.text.split()
     if len(parts) < 2:
-        safe_send_message(message.chat.id, """
-❌ CACH DUNG:
-/check user:pass
-/check user|pass
-/check user:pass lienquan
-""")
+        safe_send_message(message.chat.id, "❌ /check user:pass")
         return
     
     account_str = parts[1]
     service = parts[2] if len(parts) > 2 else "lienquan"
     
     if service not in SERVICE_ROUTES:
-        safe_send_message(message.chat.id, f"""
-❌ SERVICE KHONG HOP LE!
-Cac service: {', '.join(SERVICE_ROUTES.keys())}
-""")
+        safe_send_message(message.chat.id, f"❌ Service: {', '.join(SERVICE_ROUTES.keys())}")
         return
     
     account_input = account_str.replace('|', ':')
-    
-    accounts, stats_loc = loc_tk_mk_only(account_input)
+    accounts, _ = loc_tk_mk_only(account_input)
     
     if not accounts:
-        safe_send_message(message.chat.id, "❌ Format sai! Dung: user:pass hoac user|pass")
+        safe_send_message(message.chat.id, "❌ Format sai! Dung: user:pass")
         return
     
     user, pwd = accounts[0]
@@ -2144,17 +2192,11 @@ def cmd_checkmulti(message):
         return
     
     text = message.text.strip()
-    
     if text.startswith('/checkmulti'):
         text = text[len('/checkmulti'):].strip()
     
     if not text:
-        safe_send_message(message.chat.id, """
-❌ CACH DUNG:
-/checkmulti user1:pass1
-user2:pass2
-user3|pass3
-""")
+        safe_send_message(message.chat.id, "❌ /checkmulti user1:pass1\\nuser2:pass2")
         return
     
     lines = text.split('\n')
@@ -2163,7 +2205,6 @@ user3|pass3
     if lines:
         last_line = lines[-1].strip()
         last_word = last_line.split()[-1] if last_line.split() else ""
-        
         if last_word in SERVICE_ROUTES and len(last_line.split()) == 1:
             service = last_word
             lines = lines[:-1]
@@ -2171,27 +2212,14 @@ user3|pass3
             service = last_word
             lines[-1] = last_line.rsplit(last_word, 1)[0].strip()
     
-    accounts_input = '\n'.join(lines)
-    accounts_input = accounts_input.replace(',', '\n')
-    accounts_input = accounts_input.replace('|', ':')
-    
-    accounts, stats_loc = loc_tk_mk_only(accounts_input)
+    accounts_input = '\n'.join(lines).replace(',', '\n').replace('|', ':')
+    accounts, _ = loc_tk_mk_only(accounts_input)
     
     if not accounts:
-        safe_send_message(message.chat.id, "❌ KHONG TIM THAY ACC HOP LE!")
+        safe_send_message(message.chat.id, "❌ Khong tim thay acc!")
         return
     
-    total = len(accounts)
-    
-    safe_send_message(message.chat.id, f"""
-📊 <b>CHECK NHIEU ACC - V6.1</b>
-🎯 Tong: <code>{total}</code> accounts
-🎮 Service: <b>{SERVICE_ROUTES[service]['desc']}</b>
-📦 Batch: <code>{CHECKMULTI_BATCH_SIZE} acc/batch</code>
-
-Dang bat dau check...
-""")
-    
+    safe_send_message(message.chat.id, f"📊 Check {len(accounts)} accounts...")
     threading.Thread(target=check_batch, args=(message.chat.id, accounts, service)).start()
 
 @bot.message_handler(commands=['checkall'])
@@ -2200,8 +2228,8 @@ def cmd_checkall(message):
         return
     
     global pending_accounts
-    
     chat_id = message.chat.id
+    
     if chat_id in pending_accounts and pending_accounts[chat_id]:
         accounts = pending_accounts[chat_id]
         pending_accounts[chat_id] = []
@@ -2214,44 +2242,11 @@ def cmd_services(message):
     if not check_membership(message):
         return
     
-    msg = "📋 <b>DANH SACH SERVICE:</b>\n\n"
+    msg = "📋 <b>SERVICE:</b>\n\n"
     for key, value in SERVICE_ROUTES.items():
         msg += f"{value['icon']} <b>{key}</b>: {value['desc']}\n"
     
     safe_send_message(message.chat.id, msg)
-
-@bot.message_handler(commands=['hits'])
-def cmd_hits(message):
-    if not check_membership(message):
-        return
-    
-    try:
-        with open(OUTPUT_HITS, 'rb') as f:
-            bot.send_document(message.chat.id, f, caption="✅ hits.txt")
-    except:
-        safe_send_message(message.chat.id, "❌ Chua co hits!")
-
-@bot.message_handler(commands=['loc'])
-def cmd_loc(message):
-    if not check_membership(message):
-        return
-    
-    try:
-        with open(OUTPUT_LOC, 'rb') as f:
-            bot.send_document(message.chat.id, f, caption="📥 loc_accounts.txt")
-    except:
-        safe_send_message(message.chat.id, "❌ Chua co file loc!")
-
-@bot.message_handler(commands=['report'])
-def cmd_report(message):
-    if not check_membership(message):
-        return
-    
-    try:
-        with open(OUTPUT_RESULT, 'rb') as f:
-            bot.send_document(message.chat.id, f, caption="📊 report.txt")
-    except:
-        safe_send_message(message.chat.id, "❌ Chua co report!")
 
 @bot.message_handler(commands=['stop'])
 def cmd_stop(message):
@@ -2276,9 +2271,7 @@ def handle_text(message):
     if text.startswith('/'):
         return
     
-    text_input = text.replace('|', ':')
-    
-    accounts, stats_loc = loc_tk_mk_only(text_input)
+    accounts, _ = loc_tk_mk_only(text.replace('|', ':'))
     
     if not accounts:
         return
@@ -2291,18 +2284,13 @@ def handle_text(message):
     preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:10]])
     total = len(accounts)
     
-    msg = f"""
-📊 DA LOC {total} ACCOUNTS
-
-Preview (10 dong dau):
+    safe_send_message(chat_id, f"""
+📊 LOC {total} ACCOUNTS
+Preview:
 {preview}
-
-👇 Dung lenh de check:
-/checkall - Check tat ca service
-/checkmulti user1:pass1,user2:pass2 service - Check service cu the
-"""
-    
-    safe_send_message(chat_id, msg)
+👇 /checkall - Check tat ca
+⚠️ KHONG LUU ACCOUNT!
+""")
 
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
@@ -2310,24 +2298,22 @@ def handle_document(message):
         return
     
     global pending_accounts
-    
     chat_id = message.chat.id
     
     try:
         file_name = message.document.file_name or ""
         
-        # Kiem tra neu la admin gui file audio
         if str(message.from_user.id) == ADMIN_CHAT_ID and (file_name.endswith('.wav') or file_name.endswith('.mp3')):
             global CUSTOM_AUDIO_DATA
             file_info = bot.get_file(message.document.file_id)
             audio_data = bot.download_file(file_info.file_path)
             
             if not audio_data:
-                safe_send_message(chat_id, "❌ Khong the tai file audio!")
+                safe_send_message(chat_id, "❌ Khong the tai audio!")
                 return
             
             if len(audio_data) > 20 * 1024 * 1024:
-                safe_send_message(chat_id, "❌ File audio qua lon! Gioi han 20MB.")
+                safe_send_message(chat_id, "❌ File qua lon! Gioi han 20MB.")
                 return
             
             with AUDIO_LOCK:
@@ -2337,15 +2323,7 @@ def handle_document(message):
                 f.write(audio_data)
             
             file_size_mb = len(audio_data) / (1024 * 1024)
-            
-            safe_send_message(chat_id, f"""
-✅ <b>UPLOAD AUDIO THANH CONG!</b>
-
-📁 Ten file: <code>{file_name}</code>
-📦 Kich thuoc: <code>{file_size_mb:.2f} MB</code>
-
-Audio da duoc cap nhat tren dashboard!
-""")
+            safe_send_message(chat_id, f"✅ UPLOAD AUDIO THANH CONG! 📦 {file_size_mb:.2f} MB")
             return
         
         if not file_name.endswith('.txt'):
@@ -2355,12 +2333,10 @@ Audio da duoc cap nhat tren dashboard!
         file_info = bot.get_file(message.document.file_id)
         content = bot.download_file(file_info.file_path).decode('utf-8', errors='ignore')
         
-        content_input = content.replace('|', ':')
-        
-        accounts, stats_loc = loc_tk_mk_only(content_input)
+        accounts, _ = loc_tk_mk_only(content.replace('|', ':'))
         
         if not accounts:
-            safe_send_message(chat_id, "❌ Khong tim thay user:pass trong file!")
+            safe_send_message(chat_id, "❌ Khong tim thay user:pass!")
             return
         
         if chat_id not in pending_accounts:
@@ -2371,38 +2347,26 @@ Audio da duoc cap nhat tren dashboard!
         preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:20]])
         total = len(accounts)
         
-        msg = f"""
-✅ LOC XONG!
-📊 Tong: {total} accounts
-
-Preview (20 dong dau):
+        safe_send_message(chat_id, f"""
+✅ LOC {total} ACCOUNTS
+Preview:
 {preview}
-
-👇 Dung lenh de check:
-/checkall - Check tat ca service
-/checkmulti user1:pass1,user2:pass2 service - Check service cu the
-"""
-        
-        safe_send_message(chat_id, msg)
-        
-        with open(OUTPUT_LOC, 'rb') as f:
-            try:
-                bot.send_document(chat_id, f, caption=f"📥 loc_accounts.txt ({total} accounts)")
-            except:
-                pass
+👇 /checkall - Check tat ca
+⚠️ KHONG LUU ACCOUNT!
+""")
         
     except Exception as e:
         safe_send_message(chat_id, f"❌ Loi: {e}")
 
 def main():
     print("=" * 60)
-    print("    GARENA CHECKER BOT V6.1 - BREAKTHROUGH")
+    print("    GARENA CHECKER BOT V6.1 - HACKER EDITION")
     print("    ADMIN: @baohuyno1")
     print("    TIKTOK: @baohuy1109")
-    print("    KENH BAT BUOC: @hakiiosvip")
-    print("    WEB DASHBOARD: http://0.0.0.0:10000")
-    print("    AUDIO: http://0.0.0.0:10000/audio")
-    print("    Upload audio chi ho tro qua Telegram (admin)")
+    print("    ===== HIEU UNG 3D + HACKER DEP ===== ")
+    print("    ===== AM THANH TU DONG PHAT ===== ")
+    print("    ===== KHONG LUU ACCOUNT ===== ")
+    print("    ===== DA BO /hits VA /report ===== ")
     print("=" * 60)
     
     while True:
