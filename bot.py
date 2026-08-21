@@ -5,7 +5,7 @@
 #    - Cai tien check nhieu: hien thi tong hop chi tiet
 #    - Luu thong ke so acc da check
 #    - Hieu ung 3D + Hacker dep
-#    - Am thanh tu dong phat
+#    - Am thanh tu dong phat (DA FIX)
 #    - KHONG luu account
 # ========================================================================
 
@@ -746,22 +746,25 @@ document.addEventListener('click', function(e) {
 });
 
 // ========================================================================
-// 4. AUDIO - FIX AUTO PLAY
+// 4. AUDIO - FIX AUTO PLAY (HOAN CHINH)
 // ========================================================================
 const audio = document.getElementById('bg-audio');
 
+// Ham phat audio voi nhieu fallback
 function playAudioDirect() {
     audio.volume = 0.3;
     audio.loop = true;
-    audio.setAttribute('autoplay', '');
     audio.muted = false;
+    audio.setAttribute('autoplay', '');
     
+    // Thu phat ngay lap tuc
     var playPromise = audio.play();
     if (playPromise !== undefined) {
         playPromise.then(function() {
             console.log('🎵 Audio playing successfully');
         }).catch(function(error) {
-            console.log('Auto-play blocked, waiting for user interaction');
+            console.log('Auto-play blocked: ' + error);
+            // Fallback 1: Click cua nguoi dung
             document.addEventListener('click', function playOnce() {
                 audio.play().then(function() {
                     console.log('🎵 Audio started after user click');
@@ -770,31 +773,52 @@ function playAudioDirect() {
                 });
                 document.removeEventListener('click', playOnce);
             }, { once: true });
+            // Fallback 2: Thu lai sau 1s
             setTimeout(function() {
                 audio.play().catch(function() {});
             }, 1000);
+            // Fallback 3: Thu lai sau 3s
+            setTimeout(function() {
+                audio.play().catch(function() {});
+            }, 3000);
+            // Fallback 4: Thu lai sau 5s
+            setTimeout(function() {
+                audio.play().catch(function() {});
+            }, 5000);
         });
     }
 }
 
+// Phat khi audio da load xong
 audio.addEventListener('canplaythrough', function() {
     if (audio.paused) {
-        audio.play().catch(function() {});
+        audio.play().catch(function() {
+            console.log('Canplaythrough - play failed, retrying...');
+            setTimeout(function() {
+                audio.play().catch(function() {});
+            }, 500);
+        });
     }
 });
 
-audio.addEventListener('error', function() {
-    console.log('Audio error, reloading...');
-    audio.load();
+// Xu ly loi audio
+audio.addEventListener('error', function(e) {
+    console.log('Audio error: ' + e);
     setTimeout(function() {
-        audio.play().catch(function() {});
-    }, 500);
+        audio.load();
+        setTimeout(function() {
+            audio.play().catch(function() {});
+        }, 500);
+    }, 1000);
 });
 
+// Phat lan dau
 setTimeout(playAudioDirect, 300);
 
+// Vong lap kiem tra trang thai audio (moi 2s)
 setInterval(function() {
     if (audio.paused && !audio.ended && audio.readyState >= 2) {
+        console.log('Audio paused, attempting to resume...');
         audio.play().catch(function() {});
     }
     if (audio.error) {
@@ -804,7 +828,23 @@ setInterval(function() {
             audio.play().catch(function() {});
         }, 500);
     }
-}, 3000);
+    // Kiem tra volume
+    if (audio.volume === 0) {
+        audio.volume = 0.3;
+    }
+}, 2000);
+
+// Xu ly khi tab khong hoat dong
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        console.log('Tab visible, checking audio...');
+        if (audio.paused) {
+            audio.play().catch(function() {});
+        }
+    }
+});
+
+console.log('🎵 Audio system initialized with multiple fallbacks');
 
 // ========================================================================
 // 5. STATS & UI UPDATE
@@ -864,7 +904,8 @@ updateStats();
 
 console.log('🔥 GARENA CHECKER HACKER EDITION V6.1 LOADED!');
 console.log('📊 FULL INFO - STATS SAVED TO check_stats.json');
-console.log('🎵 AUTO AUDIO FIXED - 3D EFFECTS ENABLED');
+console.log('🎵 AUDIO FIXED WITH MULTIPLE FALLBACKS');
+console.log('💀 3D EFFECTS + HACKER THEME ENABLED');
 </script>
 </body>
 </html>"""
@@ -906,7 +947,7 @@ def start_render_server():
         print(f"[*] Dashboard: http://0.0.0.0:{port}")
         print(f"[*] Audio: http://0.0.0.0:{port}/audio")
         print(f"[*] HIEU UNG 3D + HACKER DEP")
-        print(f"[*] AM THANH TU DONG PHAT")
+        print(f"[*] AM THANH TU DONG PHAT (DA FIX)")
         print(f"[*] LUU THONG KE VAO {STATS_FILE}")
         print(f"[*] TRA KET QUA FULL INFO")
         server.serve_forever()
@@ -1343,9 +1384,11 @@ def save_result(username, password, status, service=""):
 
 def format_value(value):
     if isinstance(value, bool):
-        return "YES" if value else "NO"
+        return "Yes" if value else "No"
     elif isinstance(value, str) and value.lower() in ["true", "false"]:
-        return "YES" if value.lower() == "true" else "NO"
+        return "Yes" if value.lower() == "true" else "No"
+    elif value is None or value == "":
+        return "N/A"
     return value
 
 def check_account_api(username, password, service, use_delay=True):
@@ -1517,7 +1560,7 @@ def check_account_api(username, password, service, use_delay=True):
     return result
 
 def format_full_info(username, password, service, result_data):
-    """Format FULL INFO voi nhieu truong thong tin hon"""
+    """Format FULL INFO theo phong cach mong muon"""
     service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
     
@@ -1525,127 +1568,84 @@ def format_full_info(username, password, service, result_data):
     
     # Header
     msg = f"{line}\n{icon} <b>HIT - {service_desc}</b>\n{line}\n"
-    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
-    msg += f"📅 <b>Thoi gian:</b> <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code>\n\n"
+    msg += f"🔑 <b>{username}:{password}</b>\n"
     
     if isinstance(result_data, dict):
-        # Danh sach field mo rong
-        all_fields = {
-            # Thong tin co ban
-            "🆔 UID": "uid",
-            "👤 Username": "username",
-            "📛 Nickname": "nickname",
-            "🌍 Region": "region",
-            "🖥 Server": "server",
-            "💎 Shells": "shells",
-            "🔢 So": "so",
-            
-            # Bao mat
-            "📧 Email Verified": "email_verified",
-            "📧 Email": "email",
-            "📱 Mobile Bound": "mobile_bound",
-            "📱 Phone": "phone",
-            "🔗 FB Linked": "fb_linked",
-            "🔗 FB": "fb",
-            "🔐 Password Set": "password_set",
-            "🛡 Account Secured": "account_secured",
-            
-            # Lien Quan
-            "🎮 AOV Name": "aov_name",
-            "🏆 AOV Rank": "aov_rank",
-            "📊 AOV Level": "aov_level",
-            "🚫 AOV Banned": "aov_banned",
-            "👗 Total Skins": "aov_total_skins",
-            "⚔ Total Champs": "aov_total_champs",
-            "⭐ SS Count": "aov_ss",
-            "🔥 SSS Count": "aov_sss",
-            "🎨 Anime Count": "aov_anime",
-            
-            # FC Online
-            "⚽ FC Name": "fc_name",
-            "🆔 FC UID": "fc_uid",
-            "📊 FC OVR": "fc_ovr",
-            "📈 FC Level": "fc_level",
-            "🏅 FC Rank": "fc_rank",
-            
-            # Thong tin khac
-            "📅 Garena Created": "garena_created",
-            "⏰ Last Login": "last_login",
-            "🌐 Last Session IP": "last_session_ip",
-            "🌍 Last Session Country": "last_session_country",
-            "🚫 Banned": "banned",
-            "⏳ Ban Until": "ban_until",
-            "📝 Ban Reason": "ban_reason",
-            "🪪 CCCD": "cccd",
-            "🔑 Authen": "authen",
-            "📌 Tinh Trang": "tinh_trang",
-            "📅 Ngay Tao TK": "ngay_tao_tk",
-            
-            # Them truong moi
-            "💰 Gold": "gold",
-            "💎 Voucher": "voucher",
-            "📊 Level": "level",
-            "⭐ Star": "star",
-            "🏅 Rank": "rank",
-            "🎯 Win Rate": "win_rate",
-            "📈 Total Match": "total_match",
-            "👥 Friends": "friends",
-            "📦 Inventory": "inventory",
-            "🎁 Gifts": "gifts",
-            "📝 Bio": "bio",
-            "🌐 Language": "language",
-            "📱 Device": "device",
-            "🔄 Last Update": "last_update",
-            "⏱ Online Status": "online_status",
-            "📊 Exp": "exp",
-            "🎖 Title": "title",
-            "🏆 Achievement": "achievement",
-            "📅 Join Date": "join_date",
+        # === NHOM 1: THONG TIN CO BAN ===
+        basic_fields = {
+            "👤 UID": "uid",
+            "🌐 Region": "region",
+            "💲 Sò": "shells",
+            "💰 Nạp sò": "garena_created",
         }
-        
-        info_lines = []
-        for label, field in all_fields.items():
-            if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
-                value = result_data[field]
-                
-                if isinstance(value, (int, float)) and value == 0:
-                    continue
-                if isinstance(value, str) and value in ["0", "00", "000", "False", "false", "None", "null"]:
-                    continue
-                if isinstance(value, bool):
-                    value = "YES" if value else "NO"
-                
-                if isinstance(value, str):
-                    value = fix_encoding(value)
-                
-                info_lines.append(f"{label}: <code>{value}</code>")
-        
-        # Danh sach SS, SSS, Anime
-        list_fields = [
-            ("✨ SS List", "aov_ss_list"),
-            ("🔥 SSS List", "aov_sss_list"),
-            ("🎨 Anime List", "aov_anime_list"),
-            ("🎲 Other List", "aov_other_list"),
-            ("📦 Item List", "item_list"),
-            ("🎁 Gift List", "gift_list"),
-        ]
-        
-        for label, field in list_fields:
+        for label, field in basic_fields.items():
             if field in result_data and result_data[field]:
-                value = result_data[field]
-                if isinstance(value, list) and value:
-                    value = [fix_encoding(str(item)) for item in value]
-                    info_lines.append(f"\n{label}:")
-                    for item in value[:30]:
-                        info_lines.append(f"  • {item}")
-                    if len(value) > 30:
-                        info_lines.append(f"  ... va {len(value) - 30} item khac")
+                msg += f"{label}: {result_data[field]}\n"
         
-        if info_lines:
-            msg += "\n".join(info_lines)
+        # === NHOM 2: BAO MAT ===
+        msg += f"\n📩 EMAIL: {format_value(result_data.get('email_verified', 'No'))}"
+        if result_data.get('email'):
+            msg += f" [{result_data['email']}]"
+        msg += "\n"
         
-        msg += f"\n\n{line}"
+        msg += f"📱 SĐT: {format_value(result_data.get('mobile_bound', 'No'))}"
+        if result_data.get('phone'):
+            msg += f" [{result_data['phone']}]"
+        msg += "\n"
+        
+        msg += f"🛡 PASS: {format_value(result_data.get('password_set', 'No'))}\n"
+        msg += f"🔗 FB: {format_value(result_data.get('fb_linked', 'No'))}\n"
+        msg += f"🚫 BAND: {format_value(result_data.get('banned', 'No'))}\n"
+        
+        # === NHOM 3: THOI GIAN ===
+        msg += f"⏰ Login cuối: {result_data.get('last_login', 'N/A')}\n"
+        msg += f"📅 Tạo GR: {result_data.get('garena_created', 'N/A')}\n"
+        
+        # === NHOM 4: THONG TIN GAME ===
+        msg += f"\n🔥 NAME: {result_data.get('aov_name', 'N/A')}\n"
+        msg += f"👑 RANK: {result_data.get('aov_rank', 'N/A')}\n"
+        msg += f"✨ LEVEL: {result_data.get('aov_level', 'N/A')}\n"
+        msg += f"📅 Ngày tạo TK: {result_data.get('join_date', 'N/A')}\n"
+        msg += f"💎 SKIN: {result_data.get('aov_total_skins', 0)}\n"
+        msg += f"💪 HERO: {result_data.get('aov_total_champs', 0)}\n"
+        msg += f"⚡️ QH: {result_data.get('qh', 0)}\n"
+        
+        # === NHOM 5: XAC THUC ===
+        msg += f"\n📄 CCCD: {format_value(result_data.get('cccd', 'No'))}\n"
+        msg += f"🛡 Authen: {format_value(result_data.get('authen', 'No'))}\n"
+        
+        # === NHOM 6: DANH SACH SUU TAP ===
+        # SS List
+        ss_list = result_data.get('aov_ss_list', [])
+        if ss_list:
+            msg += f"\n✨ SS: {len(ss_list)} ["
+            msg += ", ".join([fix_encoding(str(item)) for item in ss_list[:10]])
+            if len(ss_list) > 10:
+                msg += f" ... +{len(ss_list)-10}"
+            msg += "]\n"
+        
+        # Anime List
+        anime_list = result_data.get('aov_anime_list', [])
+        if anime_list:
+            msg += f"🔥 Anime: {len(anime_list)} ["
+            msg += ", ".join([fix_encoding(str(item)) for item in anime_list[:10]])
+            if len(anime_list) > 10:
+                msg += f" ... +{len(anime_list)-10}"
+            msg += "]\n"
+        
+        # Other List
+        other_list = result_data.get('aov_other_list', [])
+        if other_list:
+            msg += f"🎲 Other: {len(other_list)} ["
+            msg += ", ".join([fix_encoding(str(item)) for item in other_list[:10]])
+            if len(other_list) > 10:
+                msg += f" ... +{len(other_list)-10}"
+            msg += "]\n"
+        
+        # === NHOM 7: TRANG THAI ===
+        msg += f"\n📋 Tình Trạng: {result_data.get('tinh_trang', 'Bình thường')}\n"
     
+    msg += f"\n{line}"
     return msg
 
 def format_dead_info(username, password, service):
@@ -2318,7 +2318,7 @@ def main():
     print("    ADMIN: @baohuyno1")
     print("    TIKTOK: @baohuy1109")
     print("    ===== HIEU UNG 3D + HACKER DEP ===== ")
-    print("    ===== AM THANH TU DONG PHAT ===== ")
+    print("    ===== AM THANH TU DONG PHAT (DA FIX) ===== ")
     print("    ===== KHONG LUU ACCOUNT ===== ")
     print("    ===== LUU THONG KE VAO check_stats.json ===== ")
     print("    ===== TRA KET QUA FULL INFO ===== ")
