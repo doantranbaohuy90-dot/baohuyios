@@ -1,11 +1,12 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - CAI TIEN CHECK NHIEU + LUU THONG KE
+#    GARENA CHECKER BOT V6.1 - FULL INFO + CHECK NHIEU + THONG KE
 # ========================================================================
-#    - Cai tien tra ket qua check nhieu: hien thi tong hop
-#    - Luu thong ke so acc da check vao file
+#    - Tra ket qua FULL INFO cho moi account
+#    - Cai tien check nhieu: hien thi tong hop chi tiet
+#    - Luu thong ke so acc da check
 #    - Hieu ung 3D + Hacker dep
 #    - Am thanh tu dong phat
-#    - KHONG luu account (chi luu thong ke)
+#    - KHONG luu account
 # ========================================================================
 
 import subprocess
@@ -53,31 +54,40 @@ AUDIO_LOCK = threading.Lock()
 STATS_FILE = "check_stats.json"
 
 def load_stats():
-    """Doc thong ke tu file"""
     try:
         if os.path.exists(STATS_FILE):
             with open(STATS_FILE, 'r', encoding='utf-8') as f:
                 return json.load(f)
     except:
         pass
-    return {"total_checked": 0, "total_hits": 0, "total_dead": 0, "total_errors": 0, "last_check": None}
+    return {"total_checked": 0, "total_hits": 0, "total_dead": 0, "total_errors": 0, "last_check": None, "history": []}
 
 def save_stats(stats_data):
-    """Luu thong ke vao file"""
     try:
         with open(STATS_FILE, 'w', encoding='utf-8') as f:
             json.dump(stats_data, f, ensure_ascii=False, indent=2)
     except:
         pass
 
-def update_stats(hit_count=0, dead_count=0, error_count=0):
-    """Cap nhat thong ke"""
+def update_stats(hit_count=0, dead_count=0, error_count=0, accounts=None):
     stats_data = load_stats()
     stats_data["total_checked"] += hit_count + dead_count + error_count
     stats_data["total_hits"] += hit_count
     stats_data["total_dead"] += dead_count
     stats_data["total_errors"] += error_count
     stats_data["last_check"] = datetime.now().isoformat()
+    
+    if accounts:
+        stats_data["history"].append({
+            "time": datetime.now().isoformat(),
+            "total": len(accounts),
+            "hits": hit_count,
+            "dead": dead_count,
+            "errors": error_count
+        })
+        if len(stats_data["history"]) > 50:
+            stats_data["history"] = stats_data["history"][-50:]
+    
     save_stats(stats_data)
     return stats_data
 
@@ -193,7 +203,6 @@ class RenderHandler(BaseHTTPRequestHandler):
         except:
             pass
         
-        # Lay thong ke tong
         total_stats = load_stats()
         total_checked = total_stats.get("total_checked", 0)
         total_hits = total_stats.get("total_hits", 0)
@@ -429,7 +438,7 @@ body {
     
     <div class="footer">
         <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> - All rights reserved</p>
-        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO</p>
+        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO - FULL INFO</p>
     </div>
 </div>
 
@@ -657,7 +666,7 @@ setInterval(updateStats, 3000);
 updateStats();
 
 console.log('🔥 GARENA CHECKER HACKER EDITION LOADED!');
-console.log('📊 Stats are being saved to check_stats.json');
+console.log('📊 FULL INFO - STATS SAVED TO check_stats.json');
 </script>
 </body>
 </html>"""
@@ -700,6 +709,7 @@ def start_render_server():
         print(f"[*] HIEU UNG 3D + HACKER DEP")
         print(f"[*] AM THANH TU DONG PHAT")
         print(f"[*] LUU THONG KE VAO {STATS_FILE}")
+        print(f"[*] TRA KET QUA FULL INFO")
         server.serve_forever()
     except Exception as e:
         print(f"[!] Loi web server: {e}")
@@ -1237,7 +1247,7 @@ def check_account_api(username, password, service, use_delay=True):
                                 is_hit = True
                         
                         # Kiem tra cac truong thong tin
-                        info_fields = ["uid", "id", "name", "nickname", "account", "info", "user", "player", "level", "rank", "email", "phone", "sdt", "shells", "aov_name", "aov_level", "aov_rank", "aov_total_skins", "aov_total_champs", "fc_name", "fc_ovr"]
+                        info_fields = ["uid", "id", "name", "nickname", "account", "info", "user", "player", "level", "rank", "email", "phone", "sdt", "shells", "aov_name", "aov_level", "aov_rank", "aov_total_skins", "aov_total_champs", "fc_name", "fc_ovr", "garena_created", "last_login", "region", "aov_ss", "aov_sss", "aov_anime"]
                         for field in info_fields:
                             if field in result_data and result_data[field] is not None and result_data[field] != "":
                                 is_hit = True
@@ -1307,75 +1317,101 @@ def check_account_api(username, password, service, use_delay=True):
         cache_results[cache_key] = result
     return result
 
-def format_hit_info(username, password, service, result_data):
+def format_full_info(username, password, service, result_data):
+    """Format FULL INFO cho ket qua HIT"""
     service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
     
-    line = "━━━━━━━━━━━━━━━━━━━━━━"
+    line = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
+    # Header
     msg = f"{line}\n{icon} <b>HIT - {service_desc}</b>\n{line}\n"
-    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
+    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n\n"
     
     if isinstance(result_data, dict):
-        # Cac truong hien thi
-        display_fields = [
-            ("👤 UID", "uid"),
-            ("👤 Name", "name"),
-            ("👤 Nickname", "nickname"),
-            ("🌐 Region", "region"),
-            ("💰 Shells", "shells"),
-            ("💲 So", "so"),
-            ("📩 EMAIL", "email"),
-            ("📱 SDT", "phone"),
-            ("🔗 FB", "fb"),
-            ("🛡 PASS", "password_set"),
-            ("🚫 BAND", "banned"),
-            ("⏰ Login cuoi", "last_login"),
-            ("📅 Tao GR", "garena_created"),
-            ("🖥 Server", "server"),
-            ("🔥 NAME", "aov_name"),
-            ("👑 RANK", "aov_rank"),
-            ("✨ LEVEL", "aov_level"),
-            ("💎 SKIN", "aov_total_skins"),
-            ("💪 HERO", "aov_total_champs"),
-            ("⚡️ QH", "aov_total_relationships"),
-            ("✨ SS", "aov_ss"),
-            ("🔥 SSS", "aov_sss"),
-            ("🔥 Anime", "aov_anime"),
-            ("🔥 FC Name", "fc_name"),
-            ("🆔 FC UID", "fc_uid"),
-            ("📊 OVR", "fc_ovr"),
-            ("✨ FC Level", "fc_level"),
-            ("👑 FC Rank", "fc_rank"),
-            ("🌐 IP", "last_session_ip"),
-            ("🌍 Country", "last_session_country"),
-            ("📅 Ngay tao TK", "ngay_tao_tk"),
-            ("🚫 Ly do Band", "ban_reason")
-        ]
+        # Danh sach field hien thi theo nhom
+        sections = {
+            "📌 THONG TIN CO BAN": [
+                ("UID", "uid"),
+                ("Username", "username"),
+                ("Nickname", "nickname"),
+                ("Region", "region"),
+                ("Server", "server"),
+                ("Shells", "shells"),
+                ("So", "so"),
+            ],
+            "🔐 BAO MAT": [
+                ("Email Verified", "email_verified"),
+                ("Email", "email"),
+                ("Mobile Bound", "mobile_bound"),
+                ("Phone", "phone"),
+                ("FB Linked", "fb_linked"),
+                ("FB", "fb"),
+                ("Password Set", "password_set"),
+                ("Account Secured", "account_secured"),
+            ],
+            "🎮 LIEN QUAN": [
+                ("AOV Name", "aov_name"),
+                ("AOV Rank", "aov_rank"),
+                ("AOV Level", "aov_level"),
+                ("AOV Banned", "aov_banned"),
+                ("Total Skins", "aov_total_skins"),
+                ("Total Champs", "aov_total_champs"),
+                ("SS Count", "aov_ss"),
+                ("SSS Count", "aov_sss"),
+                ("Anime Count", "aov_anime"),
+            ],
+            "⚽ FC ONLINE": [
+                ("FC Name", "fc_name"),
+                ("FC UID", "fc_uid"),
+                ("FC OVR", "fc_ovr"),
+                ("FC Level", "fc_level"),
+                ("FC Rank", "fc_rank"),
+            ],
+            "📅 THONG TIN KHAC": [
+                ("Garena Created", "garena_created"),
+                ("Last Login", "last_login"),
+                ("Last Session IP", "last_session_ip"),
+                ("Last Session Country", "last_session_country"),
+                ("Banned", "banned"),
+                ("Ban Until", "ban_until"),
+                ("Ban Reason", "ban_reason"),
+                ("CCCD", "cccd"),
+                ("Authen", "authen"),
+                ("Tinh Trang", "tinh_trang"),
+                ("Ngay Tao TK", "ngay_tao_tk"),
+            ]
+        }
         
         info_lines = []
         
-        for label, field in display_fields:
-            if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
-                value = result_data[field]
-                
-                if isinstance(value, (int, float)) and value == 0:
-                    continue
-                if isinstance(value, str) and value in ["0", "00", "000", "False", "false"]:
-                    continue
-                if isinstance(value, bool):
-                    value = "YES" if value else "NO"
-                
-                if isinstance(value, str):
-                    value = fix_encoding(value)
-                
-                info_lines.append(f"{label}: {value}")
+        for section_name, fields in sections.items():
+            section_items = []
+            for label, field in fields:
+                if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
+                    value = result_data[field]
+                    
+                    if isinstance(value, (int, float)) and value == 0:
+                        continue
+                    if isinstance(value, str) and value in ["0", "00", "000", "False", "false"]:
+                        continue
+                    if isinstance(value, bool):
+                        value = "YES" if value else "NO"
+                    
+                    if isinstance(value, str):
+                        value = fix_encoding(value)
+                    
+                    section_items.append(f"  {label}: {value}")
+            
+            if section_items:
+                info_lines.append(f"\n{section_name}")
+                info_lines.extend(section_items)
         
-        # Hien thi danh sach (SS, SSS, Anime)
+        # Danh sach SS, SSS, Anime
         list_fields = [
             ("✨ SS List", "aov_ss_list"),
             ("🔥 SSS List", "aov_sss_list"),
-            ("🔥 Anime List", "aov_anime_list"),
+            ("🎨 Anime List", "aov_anime_list"),
             ("🎲 Other List", "aov_other_list")
         ]
         
@@ -1384,13 +1420,28 @@ def format_hit_info(username, password, service, result_data):
                 value = result_data[field]
                 if isinstance(value, list) and value:
                     value = [fix_encoding(str(item)) for item in value]
-                    info_lines.append(f"{label}: {', '.join(value)}")
+                    info_lines.append(f"\n{label}:")
+                    for item in value[:30]:  # Gioi han 30 item
+                        info_lines.append(f"  • {item}")
+                    if len(value) > 30:
+                        info_lines.append(f"  ... va {len(value) - 30} item khac")
         
         if info_lines:
             msg += "\n".join(info_lines)
-            msg += f"\n{line}"
+        
+        msg += f"\n\n{line}"
     
     return msg
+
+def format_dead_info(username, password, service):
+    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
+    icon = SERVICE_ROUTES.get(service, {}).get("icon", "❌")
+    return f"{icon} <b>DEAD - {service_desc}</b>\n🔑 <code>{username}:{password}</code>"
+
+def format_error_info(username, password, service):
+    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
+    icon = SERVICE_ROUTES.get(service, {}).get("icon", "⚠️")
+    return f"{icon} <b>ERROR - {service_desc}</b>\n🔑 <code>{username}:{password}</code>"
 
 def check_single(chat_id, username, password, service="lienquan"):
     service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
@@ -1400,14 +1451,14 @@ def check_single(chat_id, username, password, service="lienquan"):
     result_type = result.get("result", "unknown")
     
     if result_type == "hit":
-        hit_msg = format_hit_info(username, password, service, result)
+        hit_msg = format_full_info(username, password, service, result)
         safe_send_message(chat_id, hit_msg)
         update_stats(hit_count=1)
     elif result_type == "dead":
-        safe_send_message(chat_id, f"❌ DEAD - {service_desc}\n🔑 {username}:{password}")
+        safe_send_message(chat_id, format_dead_info(username, password, service))
         update_stats(dead_count=1)
     else:
-        safe_send_message(chat_id, f"⚠️ ERROR - {service_desc}\n🔑 {username}:{password}")
+        safe_send_message(chat_id, format_error_info(username, password, service))
         update_stats(error_count=1)
 
 def check_batch(chat_id, accounts, service):
@@ -1477,10 +1528,10 @@ def check_batch(chat_id, accounts, service):
             if result_type == "hit":
                 stats["hits"] += 1
                 try:
-                    hit_msg = format_hit_info(user, pwd, service, result)
+                    hit_msg = format_full_info(user, pwd, service, result)
                     safe_send_message(chat_id, hit_msg)
-                except:
-                    pass
+                except Exception as e:
+                    print(f"[!] Loi gui hit: {e}")
             elif result_type == "dead":
                 stats["dead"] += 1
             else:
@@ -1525,46 +1576,48 @@ def check_batch(chat_id, accounts, service):
     elapsed = time.time() - stats["start_time"]
     
     # Cap nhat thong ke tong
-    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"])
+    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], accounts=accounts)
     
     # Gui tong ket
     summary = f"""
 ✅ <b>CHECK HOAN TAT!</b>
+━━━━━━━━━━━━━━━━━━━━━━
 📊 Tong: <code>{stats['total']}</code>
 🎯 HIT: <code>{stats['hits']}</code>
 ❌ DEAD: <code>{stats['dead']}</code>
 ⚠️ ERROR: <code>{stats['errors']}</code>
 ⏱ Thoi gian: <code>{elapsed:.1f}s</code>
 ⚡ Speed: <code>{stats['checked']/elapsed:.1f}</code> acc/s
+━━━━━━━━━━━━━━━━━━━━━━
 """
     
-    # Them danh sach hit
+    # Danh sach hit
     hits_list = [r for r in all_results if r["status"] == "hit"]
     if hits_list:
         summary += f"\n📌 <b>HIT LIST ({len(hits_list)}):</b>\n"
-        for r in hits_list[:20]:  # Gioi han 20
+        for r in hits_list[:20]:
             summary += f"✅ <code>{r['user']}:{r['pwd']}</code>\n"
         if len(hits_list) > 20:
             summary += f"... va {len(hits_list) - 20} hits khac"
     
-    # Them danh sach dead
+    # Danh sach dead
     dead_list = [r for r in all_results if r["status"] == "dead"]
-    if dead_list:
+    if dead_list and len(dead_list) <= 20:
         summary += f"\n❌ <b>DEAD LIST ({len(dead_list)}):</b>\n"
-        for r in dead_list[:10]:  # Gioi han 10
+        for r in dead_list[:10]:
             summary += f"❌ <code>{r['user']}:{r['pwd']}</code>\n"
         if len(dead_list) > 10:
             summary += f"... va {len(dead_list) - 10} dead khac"
     
     safe_send_message(chat_id, summary)
     
-    # Gui file thong ke neu co hits
-    if stats["hits"] > 0:
-        try:
-            with open(STATS_FILE, 'r', encoding='utf-8') as f:
-                bot.send_document(chat_id, f, caption=f"📊 check_stats.json - {stats['hits']} hits")
-        except:
-            pass
+    # Gui file thong ke
+    try:
+        stats_data = load_stats()
+        with open(STATS_FILE, 'r', encoding='utf-8') as f:
+            bot.send_document(chat_id, f, caption=f"📊 check_stats.json - {stats['hits']} hits")
+    except:
+        pass
 
 def check_all_services(chat_id, accounts):
     global checking
@@ -1621,7 +1674,7 @@ def check_all_services(chat_id, accounts):
             if result_type == "hit":
                 stats_all["hits"] += 1
                 try:
-                    hit_msg = format_hit_info(user, pwd, service, result)
+                    hit_msg = format_full_info(user, pwd, service, result)
                     safe_send_message(chat_id, hit_msg)
                 except:
                     pass
@@ -1678,18 +1731,19 @@ def check_all_services(chat_id, accounts):
     elapsed = time.time() - stats_all["start_time"]
     
     # Cap nhat thong ke tong
-    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"])
+    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"], accounts=accounts)
     
     summary = f"""
 ✅ CHECK ALL HOAN TAT!
+━━━━━━━━━━━━━━━━━━━━━━
 🎯 Hits: {stats_all['hits']}
 ❌ Dead: {stats_all['dead']}
 ⚠️ Errors: {stats_all['errors']}
 ⏱ Time: {elapsed:.1f}s
 ⚡ Speed: {stats_all['checked']/elapsed:.1f} acc/s
+━━━━━━━━━━━━━━━━━━━━━━
 """
     
-    # Hits list
     hits_list = [r for r in all_results if r["status"] == "hit"]
     if hits_list:
         summary += f"\n📌 HIT LIST ({len(hits_list)}):\n"
@@ -1771,7 +1825,6 @@ def cmd_delaudio(message):
 
 @bot.message_handler(commands=['stats'])
 def cmd_stats(message):
-    """Lenh xem thong ke tong"""
     if not check_membership(message):
         return
     
@@ -1798,9 +1851,9 @@ def cmd_start(message):
 🎵 TikTok: @baohuy1109
 
 📌 <b>LENH:</b>
-/check user:pass - Check 1 acc
-/checkmulti user1:pass1,user2:pass2 - Check nhieu
-/checkall - Check tat ca
+/check user:pass - Check 1 acc (FULL INFO)
+/checkmulti user1:pass1,user2:pass2 - Check nhieu (FULL INFO)
+/checkall - Check tat ca service
 /services - Danh sach service
 /stats - Xem thong ke tong
 /stop - Dung check
@@ -1808,6 +1861,7 @@ def cmd_start(message):
 ⚠️ <b>KHONG LUU ACCOUNT!</b>
 🔊 AM THANH TU DONG PHAT TREN WEB!
 📊 LUU THONG KE VAO check_stats.json
+📌 TRA KET QUA FULL INFO CHI TIET!
 """)
 
 @bot.message_handler(commands=['check'])
@@ -1870,7 +1924,7 @@ def cmd_checkmulti(message):
         safe_send_message(message.chat.id, "❌ Khong tim thay acc!")
         return
     
-    safe_send_message(message.chat.id, f"📊 Check {len(accounts)} accounts...")
+    safe_send_message(message.chat.id, f"📊 Check {len(accounts)} accounts (FULL INFO)...")
     threading.Thread(target=check_batch, args=(message.chat.id, accounts, service)).start()
 
 @bot.message_handler(commands=['checkall'])
@@ -2018,7 +2072,7 @@ def main():
     print("    ===== AM THANH TU DONG PHAT ===== ")
     print("    ===== KHONG LUU ACCOUNT ===== ")
     print("    ===== LUU THONG KE VAO check_stats.json ===== ")
-    print("    ===== CAI TIEN TRA KET QUA CHECK NHIEU ===== ")
+    print("    ===== TRA KET QUA FULL INFO ===== ")
     print("=" * 60)
     
     while True:
