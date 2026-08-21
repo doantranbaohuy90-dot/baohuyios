@@ -58,7 +58,6 @@ rate_lock = threading.Lock()
 last_request_time = 0
 start_time = time.time()
 
-# ========== SESSION STATS ==========
 SESSION_STATS = {"total_checked": 0, "total_hits": 0, "total_dead": 0, "total_errors": 0, "session_start": time.time(), "accounts_checked": [], "hits_detail": [], "recent_checks": []}
 SESSION_LOCK = threading.Lock()
 
@@ -113,7 +112,6 @@ class RenderHandler(BaseHTTPRequestHandler):
         total_errors = total_stats.get("total_errors", 0)
         bot_status = "Dang check" if checking else "San sang"
         bot_color = "#ff9800" if checking else "#4caf50"
-        
         services_html = ""
         for key, value in SERVICE_ROUTES.items():
             services_html += f'<div class="service-card" data-service="{key}" onclick="showServiceDetail(\'{key}\')"><div class="service-icon">{value["icon"]}</div><div class="service-info"><div class="service-name">{key}</div><div class="service-desc">{value["desc"]}</div></div><div class="service-arrow">›</div></div>'
@@ -657,12 +655,53 @@ def save_loc_file(accounts):
             for user, pwd in accounts:
                 f.write(f"{user}:{pwd}\n")
 
-def format_value(value):
-    if isinstance(value, bool):
-        return "YES" if value else "NO"
-    elif isinstance(value, str) and value.lower() in ["true", "false"]:
-        return "YES" if value.lower() == "true" else "NO"
-    return value
+def load_stats():
+    try:
+        if os.path.exists(STATS_FILE):
+            with open(STATS_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except:
+        pass
+    return {"total_checked": 0, "total_hits": 0, "total_dead": 0, "total_errors": 0, "last_check": None, "history": []}
+
+def save_stats(stats_data):
+    try:
+        with open(STATS_FILE, 'w', encoding='utf-8') as f:
+            json.dump(stats_data, f, ensure_ascii=False, indent=2)
+    except:
+        pass
+
+def update_stats(hit_count=0, dead_count=0, error_count=0, accounts=None, account_details=None):
+    stats_data = load_stats()
+    stats_data["total_checked"] += hit_count + dead_count + error_count
+    stats_data["total_hits"] += hit_count
+    stats_data["total_dead"] += dead_count
+    stats_data["total_errors"] += error_count
+    stats_data["last_check"] = datetime.now().isoformat()
+    if accounts:
+        stats_data["history"].append({
+            "time": datetime.now().isoformat(),
+            "total": len(accounts),
+            "hits": hit_count,
+            "dead": dead_count,
+            "errors": error_count
+        })
+        if len(stats_data["history"]) > 50:
+            stats_data["history"] = stats_data["history"][-50:]
+    with SESSION_LOCK:
+        SESSION_STATS["total_checked"] += hit_count + dead_count + error_count
+        SESSION_STATS["total_hits"] += hit_count
+        SESSION_STATS["total_dead"] += dead_count
+        SESSION_STATS["total_errors"] += error_count
+        if account_details:
+            SESSION_STATS["accounts_checked"].extend(account_details)
+            SESSION_STATS["recent_checks"].extend(account_details[-10:])
+            if len(SESSION_STATS["accounts_checked"]) > 1000:
+                SESSION_STATS["accounts_checked"] = SESSION_STATS["accounts_checked"][-1000:]
+            if len(SESSION_STATS["recent_checks"]) > 50:
+                SESSION_STATS["recent_checks"] = SESSION_STATS["recent_checks"][-50:]
+    save_stats(stats_data)
+    return stats_data
 
 def check_account_api(username, password, service, use_delay=True):
     if use_delay:
@@ -796,71 +835,117 @@ def check_account_api(username, password, service, use_delay=True):
     return result
 
 def format_full_info(username, password, service, result_data):
-    """Format FULL INFO gon gang"""
     service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
-    line = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    msg = f"{line}\n{icon} <b>HIT - {service_desc}</b>\n{line}\n"
-    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
-    msg += f"📅 <b>Thoi gian:</b> <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code>\n\n"
-    if isinstance(result_data, dict):
-        all_fields = {
-            "🆔 UID": "uid", "👤 Username": "username", "📛 Nickname": "nickname",
-            "🌍 Region": "region", "🖥 Server": "server", "💎 Shells": "shells", "🔢 So": "so",
-            "📧 Email Verified": "email_verified", "📧 Email": "email",
-            "📱 Mobile Bound": "mobile_bound", "📱 Phone": "phone",
-            "🔗 FB Linked": "fb_linked", "🔗 FB": "fb", "🔐 Password Set": "password_set",
-            "🛡 Account Secured": "account_secured", "🎮 AOV Name": "aov_name",
-            "🏆 AOV Rank": "aov_rank", "📊 AOV Level": "aov_level",
-            "🚫 AOV Banned": "aov_banned", "👗 Total Skins": "aov_total_skins",
-            "⚔ Total Champs": "aov_total_champs", "⭐ SS Count": "aov_ss",
-            "🔥 SSS Count": "aov_sss", "🎨 Anime Count": "aov_anime",
-            "⚽ FC Name": "fc_name", "🆔 FC UID": "fc_uid", "📊 FC OVR": "fc_ovr",
-            "📈 FC Level": "fc_level", "🏅 FC Rank": "fc_rank",
-            "📅 Garena Created": "garena_created", "⏰ Last Login": "last_login",
-            "🌐 Last Session IP": "last_session_ip", "🌍 Last Session Country": "last_session_country",
-            "🚫 Banned": "banned", "⏳ Ban Until": "ban_until", "📝 Ban Reason": "ban_reason",
-            "🪪 CCCD": "cccd", "🔑 Authen": "authen", "📌 Tinh Trang": "tinh_trang",
-            "📅 Ngay Tao TK": "ngay_tao_tk", "💰 Gold": "gold", "💎 Voucher": "voucher",
-            "📊 Level": "level", "⭐ Star": "star", "🏅 Rank": "rank",
-            "🎯 Win Rate": "win_rate", "📈 Total Match": "total_match",
-            "👥 Friends": "friends", "📦 Inventory": "inventory", "🎁 Gifts": "gifts",
-            "📝 Bio": "bio", "🌐 Language": "language", "📱 Device": "device",
-            "🔄 Last Update": "last_update", "⏱ Online Status": "online_status",
-            "📊 Exp": "exp", "🎖 Title": "title", "🏆 Achievement": "achievement",
-            "📅 Join Date": "join_date",
-        }
-        info_lines = []
-        for label, field in all_fields.items():
-            if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
-                value = result_data[field]
-                if isinstance(value, (int, float)) and value == 0:
-                    continue
-                if isinstance(value, str) and value in ["0", "00", "000", "False", "false", "None", "null"]:
-                    continue
-                if isinstance(value, bool):
-                    value = "YES" if value else "NO"
-                if isinstance(value, str):
-                    value = fix_encoding(value)
-                info_lines.append(f"{label}: <code>{value}</code>")
-        list_fields = [
-            ("✨ SS List", "aov_ss_list"), ("🔥 SSS List", "aov_sss_list"),
-            ("🎨 Anime List", "aov_anime_list"), ("🎲 Other List", "aov_other_list"),
-            ("📦 Item List", "item_list"), ("🎁 Gift List", "gift_list"),
-        ]
-        for label, field in list_fields:
-            if field in result_data and result_data[field]:
-                value = result_data[field]
-                if isinstance(value, list) and value:
-                    value = [fix_encoding(str(item)) for item in value]
-                    info_lines.append(f"\n{label}:")
-                    for item in value[:30]:
-                        info_lines.append(f"  • {item}")
-                    if len(value) > 30:
-                        info_lines.append(f"  ... va {len(value) - 30} item khac")
-        if info_lines:
-            msg += "\n".join(info_lines)
-        msg += f"\n\n{line}"
+    
+    field_map = {
+        "uid": "👤 UID", "aov_uid": "👤 UID", "id": "👤 UID",
+        "region": "🌐 Region",
+        "shells": "💲 Sò", "aov_shells": "💲 Sò",
+        "nap_so": "💰 Nạp sò", "nap_time": "💰 Nạp sò",
+        "email_verified": "📩 EMAIL", "email": "📩 EMAIL",
+        "phone_verified": "📱 SĐT", "phone": "📱 SĐT", "sdt": "📱 SĐT",
+        "password_set": "🛡 PASS", "pass_set": "🛡 PASS",
+        "fb_linked": "🔗 FB", "fb": "🔗 FB",
+        "banned": "🚫 BAND", "ban": "🚫 BAND",
+        "last_login": "⏰ Login cuối", "last_login_time": "⏰ Login cuối",
+        "garena_created": "📅 Tạo GR", "created_time": "📅 Tạo GR",
+        "aov_name": "🔥 NAME", "nickname": "🔥 NAME", "name": "🔥 NAME",
+        "aov_rank": "👑 RANK", "rank": "👑 RANK",
+        "aov_level": "✨ LEVEL", "level": "✨ LEVEL",
+        "aov_total_skins": "💎 SKIN", "total_skins": "💎 SKIN", "skins": "💎 SKIN",
+        "aov_total_champs": "💪 HERO", "total_champs": "💪 HERO", "champs": "💪 HERO",
+        "aov_qh": "⚡️ QH", "qh": "⚡️ QH",
+        "cccd": "📄 CCCD",
+        "authen": "🛡 Authen",
+        "aov_ss": "✨ SS", "ss": "✨ SS",
+        "aov_anime": "🔥 Anime", "anime": "🔥 Anime",
+        "aov_other": "🎲 Other", "other": "🎲 Other",
+        "tinh_trang": "📋 Tình Trạng", "status_note": "📋 Tình Trạng",
+    }
+    
+    display_order = [
+        "👤 UID", "🌐 Region", "💲 Sò", "💰 Nạp sò", "📩 EMAIL",
+        "📱 SĐT", "🛡 PASS", "🔗 FB", "🚫 BAND", "⏰ Login cuối",
+        "📅 Tạo GR", "🔥 NAME", "👑 RANK", "✨ LEVEL", "💎 SKIN",
+        "💪 HERO", "⚡️ QH", "📄 CCCD", "🛡 Authen", "✨ SS",
+        "🔥 Anime", "🎲 Other", "📋 Tình Trạng"
+    ]
+    
+    info_dict = {}
+    data = result_data.get("data", result_data) if isinstance(result_data, dict) else result_data
+    
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key in field_map:
+                info_dict[field_map[key]] = value
+        for key, value in result_data.items():
+            if key in field_map and field_map[key] not in info_dict:
+                info_dict[field_map[key]] = value
+    
+    # Xu ly boolean values
+    bool_fields = {
+        "📩 EMAIL": "Chưa Xác Thực", "🛡 PASS": "Yes", "🔗 FB": "Yes",
+        "🚫 BAND": "Yes", "📄 CCCD": "Yes", "🛡 Authen": "Yes"
+    }
+    for label, yes_text in bool_fields.items():
+        if label in info_dict:
+            val = info_dict[label]
+            if isinstance(val, bool):
+                info_dict[label] = f"{yes_text} [Yes]" if val else "No" if label in ["📩 EMAIL", "📄 CCCD", "🛡 Authen"] else ("Yes" if val else "NO")
+            elif isinstance(val, str):
+                if val.lower() in ["true", "yes", "1"]:
+                    info_dict[label] = f"{yes_text} [Yes]" if label == "📩 EMAIL" else "Yes"
+                elif val.lower() in ["false", "no", "0"]:
+                    info_dict[label] = "Chưa Xác Thực [No]" if label == "📩 EMAIL" else ("No" if label in ["📄 CCCD", "🛡 Authen"] else "NO")
+    
+    # Xu ly SDT dac biet
+    if "📱 SĐT" in info_dict:
+        phone_val = info_dict["📱 SĐT"]
+        if isinstance(phone_val, bool):
+            info_dict["📱 SĐT"] = "Yes" if phone_val else "No"
+        elif isinstance(phone_val, str):
+            if phone_val.lower() in ["true", "yes", "1"]:
+                info_dict["📱 SĐT"] = "Yes"
+            elif phone_val.lower() in ["false", "no", "0"]:
+                info_dict["📱 SĐT"] = "No"
+    
+    # Xu ly SS/Anime/Other list
+    for label in ["✨ SS", "🔥 Anime", "🎲 Other"]:
+        if label in info_dict:
+            val = info_dict[label]
+            if isinstance(val, list):
+                info_dict[label] = f"{len(val)} [{', '.join([fix_encoding(str(x)) for x in val])}]"
+            elif isinstance(val, (int, float)):
+                info_dict[label] = str(val)
+    
+    # Xu ly thoi gian
+    if "⏰ Login cuối" in info_dict:
+        login_val = info_dict["⏰ Login cuối"]
+        if isinstance(login_val, (int, float)) and login_val > 1000000000:
+            info_dict["⏰ Login cuối"] = datetime.fromtimestamp(login_val).strftime('%Y-%m-%d %H:%M:%S')
+    
+    if "📅 Tạo GR" in info_dict:
+        created_val = info_dict["📅 Tạo GR"]
+        if isinstance(created_val, (int, float)) and created_val > 1000000000:
+            info_dict["📅 Tạo GR"] = datetime.fromtimestamp(created_val).strftime('%H:%M:%S %d-%m-%Y')
+    
+    if "💰 Nạp sò" in info_dict:
+        nap_val = info_dict["💰 Nạp sò"]
+        if isinstance(nap_val, (int, float)) and nap_val > 1000000000:
+            info_dict["💰 Nạp sò"] = datetime.fromtimestamp(nap_val).strftime('%d/%m/%Y')
+        elif isinstance(nap_val, (int, float)) and nap_val == 0:
+            info_dict["💰 Nạp sò"] = "01/01/1970"
+    
+    # Build message
+    msg = f"✅ HIT\n🔑 <code>{username}:{password}</code>\n"
+    
+    for label in display_order:
+        if label in info_dict:
+            value = info_dict[label]
+            if value is not None and value != "" and value != "N/A":
+                msg += f"{label}: <code>{fix_encoding(str(value))}</code>\n"
+    
     return msg
 
 def format_dead_info(username, password, service):
@@ -1079,7 +1164,6 @@ def handle_audio_upload(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
         safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
-    global CUSTOM_AUDIO_DATA
     try:
         file_info = bot.get_file(message.audio.file_id)
         audio_data = bot.download_file(file_info.file_path)
@@ -1089,9 +1173,7 @@ def handle_audio_upload(message):
         if len(audio_data) > 20 * 1024 * 1024:
             safe_send_message(message.chat.id, "❌ File qua lon! Gioi han 20MB.")
             return
-        with AUDIO_LOCK:
-            CUSTOM_AUDIO_DATA = audio_data
-        with open(CUSTOM_AUDIO_PATH, 'wb') as f:
+        with open("custom_audio.wav", 'wb') as f:
             f.write(audio_data)
         duration = message.audio.duration if message.audio.duration else 0
         file_size_mb = len(audio_data) / (1024 * 1024)
@@ -1106,12 +1188,9 @@ def cmd_delaudio(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
         safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
-    global CUSTOM_AUDIO_DATA
-    with AUDIO_LOCK:
-        CUSTOM_AUDIO_DATA = None
     try:
-        if os.path.exists(CUSTOM_AUDIO_PATH):
-            os.remove(CUSTOM_AUDIO_PATH)
+        if os.path.exists("custom_audio.wav"):
+            os.remove("custom_audio.wav")
     except:
         pass
     safe_send_message(message.chat.id, "✅ Da xoa audio custom!")
@@ -1274,7 +1353,6 @@ def handle_document(message):
     try:
         file_name = message.document.file_name or ""
         if str(message.from_user.id) == ADMIN_CHAT_ID and (file_name.endswith('.wav') or file_name.endswith('.mp3')):
-            global CUSTOM_AUDIO_DATA
             file_info = bot.get_file(message.document.file_id)
             audio_data = bot.download_file(file_info.file_path)
             if not audio_data:
@@ -1283,9 +1361,7 @@ def handle_document(message):
             if len(audio_data) > 20 * 1024 * 1024:
                 safe_send_message(chat_id, "❌ File qua lon! Gioi han 20MB.")
                 return
-            with AUDIO_LOCK:
-                CUSTOM_AUDIO_DATA = audio_data
-            with open(CUSTOM_AUDIO_PATH, 'wb') as f:
+            with open("custom_audio.wav", 'wb') as f:
                 f.write(audio_data)
             file_size_mb = len(audio_data) / (1024 * 1024)
             safe_send_message(chat_id, f"✅ UPLOAD AUDIO THANH CONG! 📦 {file_size_mb:.2f} MB")
