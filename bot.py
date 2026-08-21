@@ -1,5 +1,5 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - HOAN CHINH
+#    GARENA CHECKER BOT V6.1 - FULL HOAN CHINH
 # ========================================================================
 import subprocess, sys, importlib, threading, time, json, os, re, struct, math
 import telebot, requests
@@ -520,10 +520,13 @@ def loc_tk_mk_only(content):
     stats_loc = {"total": 0, "valid": 0, "invalid": 0, "duplicate": 0}
     if not content:
         return accounts, stats_loc
+    
     pattern_colon = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80}):([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
     pattern_pipe = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80})\|([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
+    
     lines = content.split('\n')
     stats_loc["total"] = len(lines)
+    
     for line in lines:
         line = line.strip()
         if not line:
@@ -532,37 +535,66 @@ def loc_tk_mk_only(content):
             continue
         if re.match(r'^\d+$', line):
             continue
-        matches = re.findall(pattern_colon, line)
-        if matches:
-            for user, pwd in matches:
-                if is_time_value(user) or is_time_value(pwd):
-                    continue
-                if is_valid_account(user, pwd):
-                    key = f"{user}:{pwd}"
-                    if key not in seen:
-                        seen.add(key)
-                        accounts.append((user, pwd))
-                        stats_loc["valid"] += 1
-                    else:
-                        stats_loc["duplicate"] += 1
-                else:
-                    stats_loc["invalid"] += 1
+        if re.match(r'^\d{4}-\d{2}-\d{2}', line):
             continue
-        matches = re.findall(pattern_pipe, line)
-        if matches:
-            for user, pwd in matches:
-                if is_time_value(user) or is_time_value(pwd):
-                    continue
-                if is_valid_account(user, pwd):
-                    key = f"{user}:{pwd}"
-                    if key not in seen:
-                        seen.add(key)
-                        accounts.append((user, pwd))
-                        stats_loc["valid"] += 1
+        if re.match(r'^\d{2}/\d{2}/\d{4}', line):
+            continue
+        
+        colon_count = line.count(':')
+        pipe_count = line.count('|')
+        
+        if colon_count == 1 and pipe_count == 0:
+            matches = re.findall(pattern_colon, line)
+            if matches:
+                for user, pwd in matches:
+                    if is_time_value(user) or is_time_value(pwd):
+                        continue
+                    if is_valid_account(user, pwd):
+                        key = f"{user}:{pwd}"
+                        if key not in seen:
+                            seen.add(key)
+                            accounts.append((user, pwd))
+                            stats_loc["valid"] += 1
+                        else:
+                            stats_loc["duplicate"] += 1
                     else:
-                        stats_loc["duplicate"] += 1
-                else:
-                    stats_loc["invalid"] += 1
+                        stats_loc["invalid"] += 1
+                continue
+        elif pipe_count == 1 and colon_count == 0:
+            matches = re.findall(pattern_pipe, line)
+            if matches:
+                for user, pwd in matches:
+                    if is_time_value(user) or is_time_value(pwd):
+                        continue
+                    if is_valid_account(user, pwd):
+                        key = f"{user}:{pwd}"
+                        if key not in seen:
+                            seen.add(key)
+                            accounts.append((user, pwd))
+                            stats_loc["valid"] += 1
+                        else:
+                            stats_loc["duplicate"] += 1
+                    else:
+                        stats_loc["invalid"] += 1
+                continue
+        elif colon_count == 1 and pipe_count == 1:
+            matches = re.findall(pattern_colon, line)
+            if matches:
+                for user, pwd in matches:
+                    if is_time_value(user) or is_time_value(pwd):
+                        continue
+                    if is_valid_account(user, pwd):
+                        key = f"{user}:{pwd}"
+                        if key not in seen:
+                            seen.add(key)
+                            accounts.append((user, pwd))
+                            stats_loc["valid"] += 1
+                        else:
+                            stats_loc["duplicate"] += 1
+                    else:
+                        stats_loc["invalid"] += 1
+                continue
+    
     if not accounts:
         all_matches = re.findall(pattern_colon, content)
         for user, pwd in all_matches:
@@ -848,6 +880,10 @@ def format_full_info(username, password, service, result_data):
         "password_set": "🛡 PASS", "pass_set": "🛡 PASS",
         "fb_linked": "🔗 FB", "fb": "🔗 FB",
         "banned": "🚫 BAND", "ban": "🚫 BAND", "is_ban": "🚫 BAND", "band": "🚫 BAND",
+        "is_banned": "🚫 BAND", "account_banned": "🚫 BAND", "banned_status": "🚫 BAND",
+        "ban_status": "🚫 BAND", "is_banded": "🚫 BAND", "banded": "🚫 BAND",
+        "ban_info": "🚫 BAND", "ban_detail": "🚫 BAND", "ban_reason": "🚫 BAND",
+        "account_status": "🚫 BAND", "acc_status": "🚫 BAND",
         "last_login": "⏰ Login cuối", "last_login_time": "⏰ Login cuối",
         "garena_created": "📅 Tạo GR", "created_time": "📅 Tạo GR",
         "aov_name": "🔥 NAME", "nickname": "🔥 NAME", "name": "🔥 NAME",
