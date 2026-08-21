@@ -1,5 +1,5 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - FIX GON TRA KET QUA
+#    GARENA CHECKER BOT V6.1 - HOAN CHINH
 # ========================================================================
 import subprocess, sys, importlib, threading, time, json, os, re, struct, math
 import telebot, requests
@@ -847,7 +847,7 @@ def format_full_info(username, password, service, result_data):
         "phone_verified": "📱 SĐT", "phone": "📱 SĐT", "sdt": "📱 SĐT",
         "password_set": "🛡 PASS", "pass_set": "🛡 PASS",
         "fb_linked": "🔗 FB", "fb": "🔗 FB",
-        "banned": "🚫 BAND", "ban": "🚫 BAND",
+        "banned": "🚫 BAND", "ban": "🚫 BAND", "is_ban": "🚫 BAND", "band": "🚫 BAND",
         "last_login": "⏰ Login cuối", "last_login_time": "⏰ Login cuối",
         "garena_created": "📅 Tạo GR", "created_time": "📅 Tạo GR",
         "aov_name": "🔥 NAME", "nickname": "🔥 NAME", "name": "🔥 NAME",
@@ -862,6 +862,8 @@ def format_full_info(username, password, service, result_data):
         "aov_anime": "🔥 Anime", "anime": "🔥 Anime",
         "aov_other": "🎲 Other", "other": "🎲 Other",
         "tinh_trang": "📋 Tình Trạng", "status_note": "📋 Tình Trạng",
+        "aov_ss_list": "✨ SS", "aov_anime_list": "🔥 Anime", "aov_other_list": "🎲 Other",
+        "ss_list": "✨ SS", "anime_list": "🔥 Anime", "other_list": "🎲 Other",
     }
     
     display_order = [
@@ -875,66 +877,122 @@ def format_full_info(username, password, service, result_data):
     info_dict = {}
     data = result_data.get("data", result_data) if isinstance(result_data, dict) else result_data
     
+    sources = []
     if isinstance(data, dict):
-        for key, value in data.items():
+        sources.append(data)
+    if isinstance(result_data, dict):
+        sources.append(result_data)
+    
+    for source in sources:
+        for key, value in source.items():
             if key in field_map:
-                info_dict[field_map[key]] = value
-        for key, value in result_data.items():
-            if key in field_map and field_map[key] not in info_dict:
-                info_dict[field_map[key]] = value
+                label = field_map[key]
+                if label not in info_dict or info_dict[label] is None:
+                    info_dict[label] = value
     
-    # Xu ly boolean values
-    bool_fields = {
-        "📩 EMAIL": "Chưa Xác Thực", "🛡 PASS": "Yes", "🔗 FB": "Yes",
-        "🚫 BAND": "Yes", "📄 CCCD": "Yes", "🛡 Authen": "Yes"
-    }
-    for label, yes_text in bool_fields.items():
-        if label in info_dict:
-            val = info_dict[label]
-            if isinstance(val, bool):
-                info_dict[label] = f"{yes_text} [Yes]" if val else "No" if label in ["📩 EMAIL", "📄 CCCD", "🛡 Authen"] else ("Yes" if val else "NO")
-            elif isinstance(val, str):
-                if val.lower() in ["true", "yes", "1"]:
-                    info_dict[label] = f"{yes_text} [Yes]" if label == "📩 EMAIL" else "Yes"
-                elif val.lower() in ["false", "no", "0"]:
-                    info_dict[label] = "Chưa Xác Thực [No]" if label == "📩 EMAIL" else ("No" if label in ["📄 CCCD", "🛡 Authen"] else "NO")
+    # Xử lý boolean
+    if "📩 EMAIL" in info_dict:
+        val = info_dict["📩 EMAIL"]
+        if isinstance(val, bool):
+            info_dict["📩 EMAIL"] = "Chưa Xác Thực [Yes]" if val else "Chưa Xác Thực [No]"
+        elif isinstance(val, str):
+            if val.lower() in ["true", "yes", "1"]:
+                info_dict["📩 EMAIL"] = "Chưa Xác Thực [Yes]"
+            elif val.lower() in ["false", "no", "0"]:
+                info_dict["📩 EMAIL"] = "Chưa Xác Thực [No]"
     
-    # Xu ly SDT dac biet
     if "📱 SĐT" in info_dict:
-        phone_val = info_dict["📱 SĐT"]
-        if isinstance(phone_val, bool):
-            info_dict["📱 SĐT"] = "Yes" if phone_val else "No"
-        elif isinstance(phone_val, str):
-            if phone_val.lower() in ["true", "yes", "1"]:
+        val = info_dict["📱 SĐT"]
+        if isinstance(val, bool):
+            info_dict["📱 SĐT"] = "Yes" if val else "No"
+        elif isinstance(val, str):
+            if val.lower() in ["true", "yes", "1"]:
                 info_dict["📱 SĐT"] = "Yes"
-            elif phone_val.lower() in ["false", "no", "0"]:
+            elif val.lower() in ["false", "no", "0"]:
                 info_dict["📱 SĐT"] = "No"
     
-    # Xu ly SS/Anime/Other list
-    for label in ["✨ SS", "🔥 Anime", "🎲 Other"]:
-        if label in info_dict:
-            val = info_dict[label]
-            if isinstance(val, list):
-                info_dict[label] = f"{len(val)} [{', '.join([fix_encoding(str(x)) for x in val])}]"
-            elif isinstance(val, (int, float)):
-                info_dict[label] = str(val)
+    if "🛡 PASS" in info_dict:
+        val = info_dict["🛡 PASS"]
+        if isinstance(val, bool):
+            info_dict["🛡 PASS"] = "Yes" if val else "No"
+        elif isinstance(val, str):
+            if val.lower() in ["true", "yes", "1"]:
+                info_dict["🛡 PASS"] = "Yes"
+            elif val.lower() in ["false", "no", "0"]:
+                info_dict["🛡 PASS"] = "No"
     
-    # Xu ly thoi gian
+    if "🔗 FB" in info_dict:
+        val = info_dict["🔗 FB"]
+        if isinstance(val, bool):
+            info_dict["🔗 FB"] = "Yes" if val else "NO"
+        elif isinstance(val, str):
+            if val.lower() in ["true", "yes", "1"]:
+                info_dict["🔗 FB"] = "Yes"
+            elif val.lower() in ["false", "no", "0"]:
+                info_dict["🔗 FB"] = "NO"
+    
+    if "🚫 BAND" in info_dict:
+        val = info_dict["🚫 BAND"]
+        if isinstance(val, bool):
+            info_dict["🚫 BAND"] = "Yes" if val else "NO"
+        elif isinstance(val, str):
+            if val.lower() in ["true", "yes", "1"]:
+                info_dict["🚫 BAND"] = "Yes"
+            elif val.lower() in ["false", "no", "0"]:
+                info_dict["🚫 BAND"] = "NO"
+    
+    if "📄 CCCD" in info_dict:
+        val = info_dict["📄 CCCD"]
+        if isinstance(val, bool):
+            info_dict["📄 CCCD"] = "Yes" if val else "No"
+        elif isinstance(val, str):
+            if val.lower() in ["true", "yes", "1"]:
+                info_dict["📄 CCCD"] = "Yes"
+            elif val.lower() in ["false", "no", "0"]:
+                info_dict["📄 CCCD"] = "No"
+    
+    if "🛡 Authen" in info_dict:
+        val = info_dict["🛡 Authen"]
+        if isinstance(val, bool):
+            info_dict["🛡 Authen"] = "Yes" if val else "No"
+        elif isinstance(val, str):
+            if val.lower() in ["true", "yes", "1"]:
+                info_dict["🛡 Authen"] = "Yes"
+            elif val.lower() in ["false", "no", "0"]:
+                info_dict["🛡 Authen"] = "No"
+    
+    # Xử lý list SS/Anime/Other - Ưu tiên list
+    for label, list_keys in [
+        ("✨ SS", ["aov_ss_list", "ss_list", "aov_ss", "ss"]),
+        ("🔥 Anime", ["aov_anime_list", "anime_list", "aov_anime", "anime"]),
+        ("🎲 Other", ["aov_other_list", "other_list", "aov_other", "other"]),
+    ]:
+        for key in list_keys:
+            if key in result_data and result_data[key] is not None:
+                val = result_data[key]
+                if isinstance(val, list) and val:
+                    info_dict[label] = f"{len(val)} [{', '.join([fix_encoding(str(x)) for x in val])}]"
+                    break
+                elif isinstance(val, (int, float)) and val > 0:
+                    info_dict[label] = str(val)
+                    break
+    
+    # Xử lý thời gian
     if "⏰ Login cuối" in info_dict:
-        login_val = info_dict["⏰ Login cuối"]
-        if isinstance(login_val, (int, float)) and login_val > 1000000000:
-            info_dict["⏰ Login cuối"] = datetime.fromtimestamp(login_val).strftime('%Y-%m-%d %H:%M:%S')
+        val = info_dict["⏰ Login cuối"]
+        if isinstance(val, (int, float)) and val > 1000000000:
+            info_dict["⏰ Login cuối"] = datetime.fromtimestamp(val).strftime('%Y-%m-%d %H:%M:%S')
     
     if "📅 Tạo GR" in info_dict:
-        created_val = info_dict["📅 Tạo GR"]
-        if isinstance(created_val, (int, float)) and created_val > 1000000000:
-            info_dict["📅 Tạo GR"] = datetime.fromtimestamp(created_val).strftime('%H:%M:%S %d-%m-%Y')
+        val = info_dict["📅 Tạo GR"]
+        if isinstance(val, (int, float)) and val > 1000000000:
+            info_dict["📅 Tạo GR"] = datetime.fromtimestamp(val).strftime('%H:%M:%S %d-%m-%Y')
     
     if "💰 Nạp sò" in info_dict:
-        nap_val = info_dict["💰 Nạp sò"]
-        if isinstance(nap_val, (int, float)) and nap_val > 1000000000:
-            info_dict["💰 Nạp sò"] = datetime.fromtimestamp(nap_val).strftime('%d/%m/%Y')
-        elif isinstance(nap_val, (int, float)) and nap_val == 0:
+        val = info_dict["💰 Nạp sò"]
+        if isinstance(val, (int, float)) and val > 1000000000:
+            info_dict["💰 Nạp sò"] = datetime.fromtimestamp(val).strftime('%d/%m/%Y')
+        elif isinstance(val, (int, float)) and val == 0:
             info_dict["💰 Nạp sò"] = "01/01/1970"
     
     # Build message
