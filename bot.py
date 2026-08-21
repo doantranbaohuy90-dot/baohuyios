@@ -976,6 +976,10 @@ def format_full_info(username, password, service, result_data):
                 info_dict["🚫 BAND"] = "Yes"
             elif val.lower() in ["false", "no", "0"]:
                 info_dict["🚫 BAND"] = "NO"
+            else:
+                info_dict["🚫 BAND"] = "NO"
+    else:
+        info_dict["🚫 BAND"] = "NO"
     
     if "📄 CCCD" in info_dict:
         val = info_dict["📄 CCCD"]
