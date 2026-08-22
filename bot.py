@@ -1162,7 +1162,7 @@ def cmd_start(message):
     if not check_membership(message):
         return
     safe_send_message(message.chat.id, f"""
-🤖 <b>GARENA CHECKER V8.5 - PROFESSIONAL</b>
+🤖 <b>GARENA CHECKER  - PROFESSIONAL</b>
 👤 Admin: @baohuyno1
 
 📌 <b>LENH:</b>
@@ -1172,12 +1172,7 @@ def cmd_start(message):
 /services - Danh sach service
 /stop - Dung check
 
-⚡ <b>TINH NANG:</b>
-✅ Hien thi HIT chuyen nghiep
-✅ Format dep, day du thong tin
-✅ Web dashboard voi Chart.js
-✅ Thong ke service, user, ngay
-✅ Tu dong an truong rong
+
 """)
 
 @bot.message_handler(commands=['check'])
