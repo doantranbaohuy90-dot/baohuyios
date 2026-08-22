@@ -1,14 +1,11 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.3 - BỎ ĐƯỜNG KẺ
+#    GARENA CHECKER BOT V7.0 - NÂNG CẤP TOÀN DIỆN
 # ========================================================================
-#    - Tu dong loc acc bi BAN (khong hien thi)
-#    - Tu dong xoa tin nhan lenh sau khi dung
-#    - Tu dong xoa tin nhan tien do va batch
-#    - Chi hien thi HIT (acc sach) va DEAD (acc chet)
-#    - Khong hien thi acc bi BAN
-#    - Tra ket qua HIT khong dong khung
-#    - An truong rong/NO/0
-#    - Web thong ke HTML
+#    - Tối ưu hóa code, giảm thiểu lỗi
+#    - Web thống kê chuyên nghiệp với biểu đồ
+#    - Tự động refresh, responsive
+#    - Hiển thị top services, top users
+#    - Cache thông minh, xử lý lỗi tốt hơn
 # ========================================================================
 
 import subprocess
@@ -21,9 +18,11 @@ import os
 import re
 import telebot
 import requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from collections import Counter, defaultdict
+import math
 
 def install_package(package_name):
     try:
@@ -40,6 +39,23 @@ for pkg in ["requests", "pyTelegramBotAPI"]:
 # ========== FILE LUU THONG KE ==========
 STATS_FILE = "check_stats.json"
 HITS_FILE = "hits.json"
+CONFIG_FILE = "config.json"
+
+def load_config():
+    try:
+        if os.path.exists(CONFIG_FILE):
+            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except:
+        pass
+    return {}
+
+def save_config(config):
+    try:
+        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
+            json.dump(config, f, ensure_ascii=False, indent=2)
+    except:
+        pass
 
 def load_stats():
     try:
@@ -48,7 +64,18 @@ def load_stats():
                 return json.load(f)
     except:
         pass
-    return {"total_checked": 0, "total_hits": 0, "total_dead": 0, "total_errors": 0, "total_banned": 0, "last_check": None, "history": []}
+    return {
+        "total_checked": 0,
+        "total_hits": 0,
+        "total_dead": 0,
+        "total_errors": 0,
+        "total_banned": 0,
+        "last_check": None,
+        "history": [],
+        "daily_stats": {},
+        "service_stats": {},
+        "user_stats": {}
+    }
 
 def save_stats(stats_data):
     try:
@@ -73,7 +100,7 @@ def save_hits(hits_data):
     except:
         pass
 
-def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accounts=None, hit_details=None):
+def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accounts=None, hit_details=None, service=None):
     stats_data = load_stats()
     stats_data["total_checked"] += hit_count + dead_count + error_count + banned_count
     stats_data["total_hits"] += hit_count
@@ -82,6 +109,25 @@ def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accou
     stats_data["total_banned"] += banned_count
     stats_data["last_check"] = datetime.now().isoformat()
     
+    # Daily stats
+    today = datetime.now().strftime("%Y-%m-%d")
+    if today not in stats_data["daily_stats"]:
+        stats_data["daily_stats"][today] = {"hits": 0, "dead": 0, "errors": 0, "banned": 0, "total": 0}
+    stats_data["daily_stats"][today]["hits"] += hit_count
+    stats_data["daily_stats"][today]["dead"] += dead_count
+    stats_data["daily_stats"][today]["errors"] += error_count
+    stats_data["daily_stats"][today]["banned"] += banned_count
+    stats_data["daily_stats"][today]["total"] += hit_count + dead_count + error_count + banned_count
+    
+    # Service stats
+    if service:
+        if service not in stats_data["service_stats"]:
+            stats_data["service_stats"][service] = {"hits": 0, "dead": 0, "errors": 0, "banned": 0}
+        stats_data["service_stats"][service]["hits"] += hit_count
+        stats_data["service_stats"][service]["dead"] += dead_count
+        stats_data["service_stats"][service]["errors"] += error_count
+        stats_data["service_stats"][service]["banned"] += banned_count
+    
     if accounts:
         stats_data["history"].append({
             "time": datetime.now().isoformat(),
@@ -89,18 +135,29 @@ def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accou
             "hits": hit_count,
             "dead": dead_count,
             "errors": error_count,
-            "banned": banned_count
+            "banned": banned_count,
+            "service": service or "unknown"
         })
-        if len(stats_data["history"]) > 50:
-            stats_data["history"] = stats_data["history"][-50:]
+        if len(stats_data["history"]) > 100:
+            stats_data["history"] = stats_data["history"][-100:]
+    
+    # User stats
+    if hit_details:
+        for hit in hit_details:
+            user = hit.get("user", "unknown")
+            if user not in stats_data["user_stats"]:
+                stats_data["user_stats"][user] = {"count": 0, "services": set(), "last_hit": None}
+            stats_data["user_stats"][user]["count"] += 1
+            stats_data["user_stats"][user]["services"].add(hit.get("service", "unknown"))
+            stats_data["user_stats"][user]["last_hit"] = datetime.now().isoformat()
     
     save_stats(stats_data)
     
     if hit_details:
         hits = load_hits()
         hits.extend(hit_details)
-        if len(hits) > 1000:
-            hits = hits[-1000:]
+        if len(hits) > 5000:
+            hits = hits[-5000:]
         save_hits(hits)
     
     return stats_data
@@ -209,7 +266,7 @@ last_progress_msg = None
 last_batch_msg = None
 last_command_msg = None
 
-# ========== WEB SERVER ==========
+# ========== WEB SERVER NANG CAP ==========
 class StatsHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == '/':
@@ -220,38 +277,80 @@ class StatsHandler(BaseHTTPRequestHandler):
             stats_data = load_stats()
             hits = load_hits()
             
+            # Tinh toan thong ke them
+            total = stats_data.get("total_checked", 0)
+            hits_count = stats_data.get("total_hits", 0)
+            hit_rate = round((hits_count / max(total, 1)) * 100, 2)
+            
+            # Top services
+            service_stats = stats_data.get("service_stats", {})
+            top_services = sorted(service_stats.items(), key=lambda x: x[1].get("hits", 0), reverse=True)[:5]
+            
+            # Top users
+            user_stats = stats_data.get("user_stats", {})
+            top_users = sorted(user_stats.items(), key=lambda x: x[1].get("count", 0), reverse=True)[:10]
+            
+            # Daily stats cho chart
+            daily = stats_data.get("daily_stats", {})
+            last_7_days = []
+            for i in range(7):
+                date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+                if date in daily:
+                    last_7_days.append(daily[date])
+                else:
+                    last_7_days.append({"hits": 0, "dead": 0, "total": 0})
+            last_7_days.reverse()
+            
+            # History
+            history = stats_data.get("history", [])[-20:][::-1]
+            
             html = f'''<!DOCTYPE html>
 <html lang="vi">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GARENA CHECKER BOT - THỐNG KÊ</title>
+    <title>GARENA CHECKER BOT V7.0 - THỐNG KÊ</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         * {{ margin: 0; padding: 0; box-sizing: border-box; }}
         body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0a0a0a, #1a1a2e);
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
             color: #e0e0e0;
             min-height: 100vh;
             padding: 20px;
         }}
-        .container {{ max-width: 1200px; margin: 0 auto; }}
+        .container {{ max-width: 1400px; margin: 0 auto; }}
         .header {{
             text-align: center;
             padding: 30px 0;
-            border-bottom: 2px solid #00ff88;
+            border-bottom: 2px solid rgba(0,255,136,0.3);
             margin-bottom: 30px;
+            position: relative;
         }}
         .header h1 {{
             font-size: 2.5rem;
-            color: #00ff88;
-            text-shadow: 0 0 20px rgba(0,255,136,0.3);
+            background: linear-gradient(135deg, #00ff88, #00cc66);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: none;
         }}
         .header p {{ color: #888; margin-top: 10px; font-size: 1.1rem; }}
+        .status-badge {{
+            display: inline-block;
+            padding: 4px 15px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            margin-top: 10px;
+        }}
+        .status-badge.running {{ background: rgba(0,255,136,0.2); color: #00ff88; border: 1px solid #00ff88; }}
+        .status-badge.stopped {{ background: rgba(255,68,68,0.2); color: #ff4444; border: 1px solid #ff4444; }}
+        
         .stats-grid {{
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
             margin-bottom: 30px;
         }}
         .stat-card {{
@@ -259,239 +358,339 @@ class StatsHandler(BaseHTTPRequestHandler):
             border-radius: 15px;
             padding: 20px;
             text-align: center;
-            border: 1px solid rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.08);
             transition: all 0.3s ease;
             backdrop-filter: blur(10px);
         }}
         .stat-card:hover {{
             transform: translateY(-5px);
-            border-color: #00ff88;
-            box-shadow: 0 10px 30px rgba(0,255,136,0.1);
+            border-color: rgba(0,255,136,0.3);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
         }}
-        .stat-card .icon {{ font-size: 2.5rem; margin-bottom: 10px; }}
-        .stat-card .number {{ font-size: 2.5rem; font-weight: bold; color: #fff; }}
-        .stat-card .label {{ color: #888; font-size: 0.9rem; margin-top: 5px; }}
-        .stat-card.hit .number {{ color: #00ff88; }}
-        .stat-card.dead .number {{ color: #ff4444; }}
-        .stat-card.banned .number {{ color: #ff8800; }}
-        .stat-card.error .number {{ color: #ff44ff; }}
-        .stat-card.total .number {{ color: #44aaff; }}
-        .stat-card.rate .number {{ color: #ffdd00; }}
+        .stat-card .icon {{ font-size: 2rem; margin-bottom: 8px; }}
+        .stat-card .number {{
+            font-size: 2rem;
+            font-weight: bold;
+            background: linear-gradient(135deg, #fff, #aaa);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }}
+        .stat-card .label {{ color: #888; font-size: 0.85rem; margin-top: 5px; }}
+        .stat-card.hit .number {{ background: linear-gradient(135deg, #00ff88, #00cc66); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        .stat-card.dead .number {{ background: linear-gradient(135deg, #ff4444, #cc0000); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        .stat-card.banned .number {{ background: linear-gradient(135deg, #ff8800, #cc6600); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        .stat-card.error .number {{ background: linear-gradient(135deg, #ff44ff, #cc00cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        .stat-card.total .number {{ background: linear-gradient(135deg, #44aaff, #0066cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        .stat-card.rate .number {{ background: linear-gradient(135deg, #ffdd00, #ffaa00); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
+        
+        .row {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 30px;
+        }}
+        @media (max-width: 768px) {{ .row {{ grid-template-columns: 1fr; }} }}
         
         .section {{
             background: rgba(255,255,255,0.03);
             border-radius: 15px;
-            padding: 25px;
-            margin-bottom: 30px;
+            padding: 20px;
             border: 1px solid rgba(255,255,255,0.05);
         }}
         .section h2 {{
             color: #00ff88;
-            font-size: 1.5rem;
-            margin-bottom: 20px;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
             display: flex;
             align-items: center;
             gap: 10px;
         }}
         .section h2 .badge {{
-            background: rgba(0,255,136,0.2);
-            padding: 2px 12px;
-            border-radius: 20px;
-            font-size: 0.8rem;
+            background: rgba(0,255,136,0.15);
+            padding: 2px 10px;
+            border-radius: 15px;
+            font-size: 0.7rem;
             color: #00ff88;
         }}
+        
+        .chart-container {{ position: relative; height: 200px; }}
+        
         .history-table {{
             width: 100%;
             border-collapse: collapse;
-            font-size: 0.9rem;
+            font-size: 0.85rem;
         }}
         .history-table th {{
-            background: rgba(0,255,136,0.1);
+            background: rgba(0,255,136,0.08);
             color: #00ff88;
-            padding: 12px 15px;
+            padding: 10px 12px;
             text-align: left;
-            border-bottom: 2px solid #00ff88;
+            border-bottom: 2px solid rgba(0,255,136,0.2);
         }}
         .history-table td {{
-            padding: 10px 15px;
+            padding: 8px 12px;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }}
         .history-table tr:hover td {{ background: rgba(255,255,255,0.03); }}
-        .history-table .hit-count {{ color: #00ff88; font-weight: bold; }}
-        .history-table .dead-count {{ color: #ff4444; font-weight: bold; }}
-        .history-table .banned-count {{ color: #ff8800; font-weight: bold; }}
-        .history-table .error-count {{ color: #ff44ff; font-weight: bold; }}
+        .hit-count {{ color: #00ff88; font-weight: bold; }}
+        .dead-count {{ color: #ff4444; font-weight: bold; }}
+        .banned-count {{ color: #ff8800; font-weight: bold; }}
+        .error-count {{ color: #ff44ff; font-weight: bold; }}
         
         .hit-list {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-            gap: 10px;
-            max-height: 600px;
+            grid-template-columns: 1fr;
+            gap: 6px;
+            max-height: 400px;
             overflow-y: auto;
         }}
         .hit-item {{
             background: rgba(0,255,136,0.05);
-            border: 1px solid rgba(0,255,136,0.2);
+            border: 1px solid rgba(0,255,136,0.1);
             border-radius: 8px;
-            padding: 12px 15px;
-            font-size: 0.85rem;
+            padding: 8px 12px;
+            font-size: 0.8rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            transition: all 0.3s ease;
+            transition: all 0.2s;
         }}
         .hit-item:hover {{
-            background: rgba(0,255,136,0.1);
-            border-color: #00ff88;
+            background: rgba(0,255,136,0.08);
+            border-color: rgba(0,255,136,0.3);
         }}
         .hit-item .acc {{
             color: #fff;
             font-family: 'Courier New', monospace;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
         }}
         .hit-item .service {{
             color: #888;
-            font-size: 0.75rem;
-            background: rgba(255,255,255,0.05);
-            padding: 2px 10px;
-            border-radius: 12px;
-        }}
-        .hit-item .time {{
-            color: #666;
             font-size: 0.7rem;
+            background: rgba(255,255,255,0.05);
+            padding: 2px 8px;
+            border-radius: 10px;
         }}
-        .refresh-btn {{
-            background: linear-gradient(135deg, #00ff88, #00cc66);
-            color: #0a0a0a;
-            border: none;
-            padding: 12px 30px;
-            border-radius: 30px;
-            font-size: 1rem;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-bottom: 20px;
+        .hit-item .time {{ color: #555; font-size: 0.65rem; }}
+        
+        .top-list {{
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 4px;
         }}
-        .refresh-btn:hover {{
-            transform: scale(1.05);
-            box-shadow: 0 5px 20px rgba(0,255,136,0.3);
+        .top-item {{
+            display: flex;
+            justify-content: space-between;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8rem;
         }}
+        .top-item:hover {{ background: rgba(255,255,255,0.03); }}
+        .top-item .name {{ color: #aaa; }}
+        .top-item .value {{ color: #00ff88; font-weight: bold; }}
+        
         .footer {{
             text-align: center;
             padding: 20px;
-            color: #666;
+            color: #555;
             border-top: 1px solid rgba(255,255,255,0.05);
             margin-top: 30px;
+            font-size: 0.85rem;
         }}
         .footer a {{ color: #00ff88; text-decoration: none; }}
-        ::-webkit-scrollbar {{ width: 8px; }}
-        ::-webkit-scrollbar-track {{ background: rgba(255,255,255,0.05); border-radius: 10px; }}
-        ::-webkit-scrollbar-thumb {{ background: #00ff88; border-radius: 10px; }}
-        .status-badge {{
-            display: inline-block;
-            padding: 2px 10px;
-            border-radius: 12px;
-            font-size: 0.7rem;
-            font-weight: bold;
+        
+        ::-webkit-scrollbar {{ width: 6px; }}
+        ::-webkit-scrollbar-track {{ background: rgba(255,255,255,0.03); border-radius: 10px; }}
+        ::-webkit-scrollbar-thumb {{ background: rgba(0,255,136,0.3); border-radius: 10px; }}
+        ::-webkit-scrollbar-thumb:hover {{ background: rgba(0,255,136,0.5); }}
+        
+        .refresh-info {{
+            text-align: center;
+            color: #444;
+            font-size: 0.75rem;
+            margin-top: 10px;
         }}
-        .status-badge.running {{ background: #00ff88; color: #0a0a0a; }}
-        .status-badge.stopped {{ background: #ff4444; color: #fff; }}
     </style>
 </head>
 <body>
     <div class="container">
         <div class="header">
-            <h1>🎮 GARENA CHECKER BOT</h1>
-            <p>Thống kê chi tiết - Cập nhật tự động mỗi 10 giây</p>
-            <p style="margin-top: 10px;">
-                <span class="status-badge {"running" if checking else "stopped"}">
-                    {"🟢 ĐANG CHẠY" if checking else "🔴 DỪNG"}
-                </span>
-            </p>
+            <h1>🎮 GARENA CHECKER BOT V7.0</h1>
+            <p>Hệ thống kiểm tra tài khoản tự động</p>
+            <span class="status-badge {"running" if checking else "stopped"}">
+                {"🟢 ĐANG CHẠY" if checking else "🔴 DỪNG"}
+            </span>
         </div>
         
         <div class="stats-grid">
             <div class="stat-card total">
                 <div class="icon">📊</div>
-                <div class="number">{stats_data.get("total_checked", 0)}</div>
+                <div class="number">{total:,}</div>
                 <div class="label">Tổng đã check</div>
             </div>
             <div class="stat-card hit">
                 <div class="icon">✅</div>
-                <div class="number">{stats_data.get("total_hits", 0)}</div>
+                <div class="number">{hits_count:,}</div>
                 <div class="label">HIT</div>
             </div>
             <div class="stat-card dead">
                 <div class="icon">❌</div>
-                <div class="number">{stats_data.get("total_dead", 0)}</div>
+                <div class="number">{stats_data.get("total_dead", 0):,}</div>
                 <div class="label">DEAD</div>
             </div>
             <div class="stat-card banned">
                 <div class="icon">🚫</div>
-                <div class="number">{stats_data.get("total_banned", 0)}</div>
+                <div class="number">{stats_data.get("total_banned", 0):,}</div>
                 <div class="label">BANNED</div>
             </div>
             <div class="stat-card error">
                 <div class="icon">⚠️</div>
-                <div class="number">{stats_data.get("total_errors", 0)}</div>
+                <div class="number">{stats_data.get("total_errors", 0):,}</div>
                 <div class="label">ERROR</div>
             </div>
             <div class="stat-card rate">
                 <div class="icon">📈</div>
-                <div class="number">{round((stats_data.get("total_hits", 0) / max(stats_data.get("total_checked", 1), 1)) * 100, 1)}%</div>
+                <div class="number">{hit_rate}%</div>
                 <div class="label">Tỷ lệ HIT</div>
             </div>
         </div>
         
-        <div class="section">
-            <h2>📋 Lịch sử check <span class="badge">{len(stats_data.get("history", []))} lần</span></h2>
-            <table class="history-table">
-                <thead>
-                    <tr>
-                        <th>Thời gian</th>
-                        <th>Tổng</th>
-                        <th>HIT</th>
-                        <th>DEAD</th>
-                        <th>BANNED</th>
-                        <th>ERROR</th>
-                    </tr>
-                </thead>
-                <tbody>
+        <div class="row">
+            <div class="section">
+                <h2>📈 Biểu đồ 7 ngày <span class="badge">HIT/DEAD</span></h2>
+                <div class="chart-container">
+                    <canvas id="dailyChart"></canvas>
+                </div>
+            </div>
+            <div class="section">
+                <h2>🏆 Top Services <span class="badge">HIT nhiều nhất</span></h2>
+                <div class="top-list">
                     {"".join(f'''
-                    <tr>
-                        <td>{h.get("time", "")[:19].replace("T", " ")}</td>
-                        <td>{h.get("total", 0)}</td>
-                        <td class="hit-count">{h.get("hits", 0)}</td>
-                        <td class="dead-count">{h.get("dead", 0)}</td>
-                        <td class="banned-count">{h.get("banned", 0)}</td>
-                        <td class="error-count">{h.get("errors", 0)}</td>
-                    </tr>
-                    ''' for h in stats_data.get("history", [])[-20:][::-1])}
-                </tbody>
-            </table>
+                    <div class="top-item">
+                        <span class="name">{SERVICE_ROUTES.get(s, {}).get("icon", "❓")} {SERVICE_ROUTES.get(s, {}).get("desc", s)}</span>
+                        <span class="value">{d.get("hits", 0)} HIT</span>
+                    </div>
+                    ''' for s, d in top_services)}
+                    {"<div style='color:#555;text-align:center;padding:10px;'>Chưa có dữ liệu</div>" if not top_services else ""}
+                </div>
+            </div>
+        </div>
+        
+        <div class="row">
+            <div class="section">
+                <h2>👑 Top Users <span class="badge">Nhiều HIT nhất</span></h2>
+                <div class="top-list">
+                    {"".join(f'''
+                    <div class="top-item">
+                        <span class="name">{user}</span>
+                        <span class="value">{data.get("count", 0)} HIT</span>
+                    </div>
+                    ''' for user, data in top_users)}
+                    {"<div style='color:#555;text-align:center;padding:10px;'>Chưa có dữ liệu</div>" if not top_users else ""}
+                </div>
+            </div>
+            <div class="section">
+                <h2>📋 Lịch sử gần đây <span class="badge">{len(history)} bản ghi</span></h2>
+                <div style="max-height:300px;overflow-y:auto;">
+                    <table class="history-table">
+                        <thead>
+                            <tr>
+                                <th>Thời gian</th>
+                                <th>Tổng</th>
+                                <th>HIT</th>
+                                <th>DEAD</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {"".join(f'''
+                            <tr>
+                                <td>{h.get("time", "")[5:16]}</td>
+                                <td>{h.get("total", 0)}</td>
+                                <td class="hit-count">{h.get("hits", 0)}</td>
+                                <td class="dead-count">{h.get("dead", 0)}</td>
+                            </tr>
+                            ''' for h in history)}
+                            {"<tr><td colspan='4' style='text-align:center;color:#555;'>Chưa có lịch sử</td></tr>" if not history else ""}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
         </div>
         
         <div class="section">
-            <h2>🎯 HIT gần đây <span class="badge">{len(hits)} acc</span></h2>
+            <h2>🎯 HIT gần đây <span class="badge">{len(hits)} tài khoản</span></h2>
             <div class="hit-list">
                 {"".join(f'''
                 <div class="hit-item">
                     <span class="acc">{h.get("user", "")}:{h.get("pwd", "")}</span>
                     <span class="service">{h.get("service", "")}</span>
-                    <span class="time">{h.get("time", "")[:19].replace("T", " ")}</span>
+                    <span class="time">{h.get("time", "")[5:16]}</span>
                 </div>
-                ''' for h in hits[-50:][::-1])}
-                {"<p style='color:#666;text-align:center;padding:20px;'>Chưa có HIT nào</p>" if not hits else ""}
+                ''' for h in hits[-30:][::-1])}
+                {"<div style='color:#555;text-align:center;padding:20px;'>Chưa có HIT nào</div>" if not hits else ""}
             </div>
         </div>
         
         <div class="footer">
-            <p>Admin: <a href="https://t.me/baohuyno1">@baohuyno1</a> | Bot V6.3</p>
-            <p style="font-size: 0.8rem; margin-top: 5px;">Tự động refresh mỗi 10 giây</p>
+            <p>Admin: <a href="https://t.me/baohuyno1">@baohuyno1</a> | Bot V7.0</p>
+            <p class="refresh-info">🔄 Tự động làm mới mỗi 15 giây</p>
         </div>
     </div>
     <script>
-        setTimeout(function() {{ location.reload(); }}, 10000);
+        // Chart
+        const ctx = document.getElementById('dailyChart').getContext('2d');
+        const dailyData = {json.dumps(last_7_days)};
+        const labels = [];
+        for(let i = 6; i >= 0; i--) {{
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            labels.push(d.toLocaleDateString('vi-VN', {{day:'2-digit', month:'2-digit'}}));
+        }}
+        new Chart(ctx, {{
+            type: 'bar',
+            data: {{
+                labels: labels,
+                datasets: [
+                    {{
+                        label: 'HIT',
+                        data: dailyData.map(d => d.hits || 0),
+                        backgroundColor: 'rgba(0, 255, 136, 0.6)',
+                        borderColor: '#00ff88',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }},
+                    {{
+                        label: 'DEAD',
+                        data: dailyData.map(d => d.dead || 0),
+                        backgroundColor: 'rgba(255, 68, 68, 0.6)',
+                        borderColor: '#ff4444',
+                        borderWidth: 1,
+                        borderRadius: 4
+                    }}
+                ]
+            }},
+            options: {{
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {{
+                    legend: {{
+                        labels: {{ color: '#888', font: {{ size: 11 }} }}
+                    }}
+                }},
+                scales: {{
+                    y: {{
+                        beginAtZero: true,
+                        ticks: {{ color: '#555', font: {{ size: 10 }} }}
+                    }},
+                    x: {{
+                        ticks: {{ color: '#555', font: {{ size: 10 }} }}
+                    }}
+                }}
+            }}
+        }});
+        
+        // Auto refresh
+        setTimeout(function() {{ location.reload(); }}, 15000);
     </script>
 </body>
 </html>'''
@@ -876,18 +1075,18 @@ def check_single(chat_id, username, password, service="lienquan", cmd_msg=None):
     result_type = result.get("result", "unknown")
     is_banned = result.get("_is_banned", False)
     if is_banned or result_type == "banned":
-        update_stats(banned_count=1)
+        update_stats(banned_count=1, service=service)
         return
     if result_type == "hit":
         hit_msg = format_full_info_compact(username, password, service, result)
         safe_send_message(chat_id, hit_msg)
-        update_stats(hit_count=1, hit_details=[{"user": username, "pwd": password, "service": service, "time": datetime.now().isoformat()}])
+        update_stats(hit_count=1, hit_details=[{"user": username, "pwd": password, "service": service, "time": datetime.now().isoformat()}], service=service)
     elif result_type == "dead":
         safe_send_message(chat_id, format_dead_info(username, password, service))
-        update_stats(dead_count=1)
+        update_stats(dead_count=1, service=service)
     else:
         safe_send_message(chat_id, format_error_info(username, password, service))
-        update_stats(error_count=1)
+        update_stats(error_count=1, service=service)
 
 def check_batch(chat_id, accounts, service, cmd_msg=None):
     global checking, stats, last_progress_msg, last_batch_msg
@@ -985,7 +1184,7 @@ def check_batch(chat_id, accounts, service, cmd_msg=None):
     if last_batch_msg:
         safe_delete_message(chat_id, last_batch_msg.message_id)
         last_batch_msg = None
-    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], banned_count=stats["banned"], accounts=accounts, hit_details=hit_details)
+    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], banned_count=stats["banned"], accounts=accounts, hit_details=hit_details, service=service)
     summary = f"✅ CHECK HOAN TAT!\n━━━━━━━━━━━━━━━━\n📊 Tong: {stats['total']}\n🎯 HIT: {stats['hits']}\n❌ DEAD: {stats['dead']}\n🚫 BANNED: {stats['banned']}\n⚠️ ERROR: {stats['errors']}\n⏱ {elapsed:.1f}s"
     hits_list = [r for r in all_results if r["status"] == "hit" and not r["banned"]]
     if hits_list:
@@ -1096,7 +1295,7 @@ def check_all_services(chat_id, accounts, cmd_msg=None):
     if last_batch_msg:
         safe_delete_message(chat_id, last_batch_msg.message_id)
         last_batch_msg = None
-    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"], banned_count=stats_all["banned"], accounts=accounts, hit_details=hit_details)
+    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"], banned_count=stats_all["banned"], accounts=accounts, hit_details=hit_details, service="fullpack")
     summary = f"✅ CHECK ALL HOAN TAT!\n━━━━━━━━━━━━━━━━\n🎯 HIT: {stats_all['hits']}\n❌ DEAD: {stats_all['dead']}\n🚫 BANNED: {stats_all['banned']}\n⚠️ ERRORS: {stats_all['errors']}\n⏱ {elapsed:.1f}s"
     hits_list = [r for r in all_results if r["status"] == "hit" and not r["banned"]]
     if hits_list:
@@ -1112,7 +1311,7 @@ def check_all_services(chat_id, accounts, cmd_msg=None):
 def cmd_start(message):
     if not check_membership(message):
         return
-    msg = bot.send_message(message.chat.id, f"""🤖 GARENA CHECKER BOT V6.3 - KHÔNG ĐƯỜNG KẺ
+    msg = bot.send_message(message.chat.id, f"""🤖 GARENA CHECKER BOT V7.0 - NÂNG CẤP TOÀN DIỆN
 👤 Admin: @baohuyno1
 
 📌 LENH:
@@ -1130,7 +1329,10 @@ def cmd_start(message):
 ✅ HIT compact - an truong rong/NO/0
 ✅ Khong dong khung
 ✅ FULL INFO cho HIT
-✅ Web thong ke HTML""")
+✅ Web thong ke chuyen nghiep voi Chart.js
+✅ Thong ke theo service, user, ngay
+✅ Top services, top users
+✅ Tu dong refresh web""")
     threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
 
 @bot.message_handler(commands=['check'])
@@ -1220,12 +1422,13 @@ def cmd_stats(message):
     stats_data = load_stats()
     msg = f"""📊 THONG KE TONG
 ━━━━━━━━━━━━━━━━━━━━━━
-📦 Tong acc da check: {stats_data.get('total_checked', 0)}
-✅ Tong hits: {stats_data.get('total_hits', 0)}
-❌ Tong dead: {stats_data.get('total_dead', 0)}
-🚫 Tong banned: {stats_data.get('total_banned', 0)}
-⚠️ Tong errors: {stats_data.get('total_errors', 0)}
-⏰ Lan check cuoi: {stats_data.get('last_check', 'Chua co')}"""
+📦 Tong acc da check: {stats_data.get('total_checked', 0):,}
+✅ Tong hits: {stats_data.get('total_hits', 0):,}
+❌ Tong dead: {stats_data.get('total_dead', 0):,}
+🚫 Tong banned: {stats_data.get('total_banned', 0):,}
+⚠️ Tong errors: {stats_data.get('total_errors', 0):,}
+📈 Ty le HIT: {round((stats_data.get('total_hits', 0) / max(stats_data.get('total_checked', 1), 1)) * 100, 2)}%
+⏰ Lan check cuoi: {stats_data.get('last_check', 'Chua co')[:19]}"""
     safe_send_message(message.chat.id, msg)
     threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
 
@@ -1247,7 +1450,19 @@ def cmd_webstats(message):
     try:
         hostname = socket.gethostname()
         local_ip = socket.gethostbyname(hostname)
-        msg = f"🌐 WEB THONG KE:\nhttp://{local_ip}:{WEB_PORT}\nhttp://localhost:{WEB_PORT}"
+        msg = f"""🌐 WEB THONG KE NANG CAP:
+━━━━━━━━━━━━━━━━━━━━━━
+📊 http://{local_ip}:{WEB_PORT}
+📊 http://localhost:{WEB_PORT}
+
+💡 Tinh nang web:
+• Bieu do HIT/DEAD 7 ngay
+• Top services HIT
+• Top users HIT
+• Lich su chi tiet
+• HIT gan day
+• Tu dong refresh 15s
+• Responsive mobile"""
     except:
         msg = f"🌐 WEB THONG KE:\nhttp://localhost:{WEB_PORT}"
     safe_send_message(message.chat.id, msg)
@@ -1302,12 +1517,12 @@ def handle_document(message):
 
 def main():
     print("=" * 60)
-    print("    GARENA CHECKER BOT V6.3 - KHONG DUONG KE")
+    print("    GARENA CHECKER BOT V7.0 - NANG CAP TOAN DIEN")
     print("    ADMIN: @baohuyno1")
     print("    ===== LOC ACC BAN - KHONG HIEN THI ===== ")
     print("    ===== AN TRUONG RONG/NO/0 ===== ")
     print("    ===== KHONG DONG KHUNG ===== ")
-    print("    ===== TU DONG XOA LENH + TIN NHAN ===== ")
+    print("    ===== WEB THONG KE CHUYEN NGHIEP ===== ")
     print("=" * 60)
     while True:
         try:
