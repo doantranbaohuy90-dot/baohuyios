@@ -1902,9 +1902,9 @@ def cmd_start(message):
         return
     
     safe_send_message(message.chat.id, f"""
-🤖 <b>GARENA CHECKER BOT V6.1 - HACKER EDITION</b>
+ <b>GARENA CHECKER BOT </b>
 👤 Admin: @baohuyno1
-🎵 TikTok: @baohuy1109
+
 
 📌 <b>LENH:</b>
 /check user:pass - Check 1 acc (FULL INFO)
@@ -1914,11 +1914,7 @@ def cmd_start(message):
 /stats - Xem thong ke tong
 /stop - Dung check
 
-⚠️ <b>KHONG LUU ACCOUNT!</b>
-🔊 AM THANH TU DONG PHAT TREN WEB!
-📊 LUU THONG KE VAO check_stats.json
-📌 TRA KET QUA FULL INFO CHI TIET!
-🗑️ TU DONG XOA TIN NHAN TIEN DO!
+
 """)
 
 @bot.message_handler(commands=['check'])
