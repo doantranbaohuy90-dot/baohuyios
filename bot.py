@@ -1,13 +1,11 @@
 # ========================================================================
-#    GARENA CHECKER BOT V8.5 - FULL PROFESSIONAL SYSTEM
+#    GARENA CHECKER BOT V8.7 - FULL SYSTEM + FILTER BANNED
 # ========================================================================
-#    - Hệ thống check tài khoản chuyên nghiệp
-#    - Web dashboard với Chart.js, thống kê chi tiết
-#    - Hiển thị HIT đẹp, đầy đủ thông tin
-#    - Tự động ẩn trường rỗng, format chuyên nghiệp
-#    - Hiệu ứng 3D, Matrix, Laser trên web
-#    - Auto audio streaming
-#    - Cache thông minh, xử lý lỗi tốt
+#    - Tự động lọc acc BAN (không hiển thị)
+#    - Bỏ qua acc lỗi, không hiển thị
+#    - Chỉ hiển thị HIT và DEAD
+#    - Web dashboard chuyên nghiệp
+#    - Format HIT đẹp, không đường kẻ
 # ========================================================================
 
 import subprocess
@@ -46,7 +44,6 @@ for pkg in ["requests", "pyTelegramBotAPI"]:
 # ========== FILE SYSTEM ==========
 STATS_FILE = "check_stats.json"
 HITS_FILE = "hits.json"
-CONFIG_FILE = "config.json"
 CUSTOM_AUDIO_PATH = "custom_audio.wav"
 CUSTOM_AUDIO_DATA = None
 AUDIO_LOCK = threading.Lock()
@@ -178,7 +175,7 @@ class RenderHandler(BaseHTTPRequestHandler):
                 "hits_count": len(hits),
                 "services": list(SERVICE_ROUTES.keys()),
                 "admin": ADMIN_USERNAME,
-                "version": "8.5"
+                "version": "8.7"
             }).encode('utf-8'))
         elif self.path == '/api/services':
             self.send_response(200)
@@ -307,7 +304,7 @@ class RenderHandler(BaseHTTPRequestHandler):
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GARENA CHECKER V8.5 - PROFESSIONAL</title>
+<title>GARENA CHECKER V8.7 - PROFESSIONAL</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 <style>
 * {{ margin:0; padding:0; box-sizing:border-box; }}
@@ -527,8 +524,8 @@ body {{
 <body>
 <div class="container">
     <div class="header">
-        <h1>🎮 GARENA CHECKER V8.5</h1>
-        <p>Professional Account Checker System</p>
+        <h1>🎮 GARENA CHECKER V8.7</h1>
+        <p>Professional Account Checker - Filter BAN & ERROR</p>
         <div class="status-badge">{"🟢 ĐANG CHẠY" if checking else "🔴 DỪNG"}</div>
         <p style="color:#555;font-size:0.8rem;margin-top:8px;">Admin: <a href="https://t.me/baohuyno1" style="color:#00ff88;">@baohuyno1</a></p>
     </div>
@@ -580,7 +577,7 @@ body {{
     </div>
     
     <div class="footer">
-        <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> | GARENA CHECKER V8.5</p>
+        <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> | GARENA CHECKER V8.7</p>
     </div>
 </div>
 
@@ -898,11 +895,12 @@ def check_account_api(username, password, service, use_delay=True):
                             if isinstance(v, str):
                                 data[k] = fix_encoding(v)
                         
+                        # CHECK BANNED - Tự động lọc acc BAN
                         is_banned = False
                         for field in ["banned", "ban", "aov_banned"]:
                             if field in data:
                                 val = data[field]
-                                if (isinstance(val, bool) and val) or (isinstance(val, str) and val.upper() in ["YES", "TRUE", "BANNED"]):
+                                if (isinstance(val, bool) and val) or (isinstance(val, str) and val.upper() in ["YES", "TRUE", "BANNED", "BAN"]):
                                     is_banned = True
                                     break
                         if is_banned:
@@ -911,6 +909,7 @@ def check_account_api(username, password, service, use_delay=True):
                                 cache_results[cache_key] = data
                             return data
                         
+                        # CHECK HIT
                         is_hit = False
                         if data.get("status") in [True, "true", 1, "1", "success", "HIT", "hit"]:
                             is_hit = True
@@ -946,11 +945,10 @@ def check_account_api(username, password, service, use_delay=True):
 
 # ========== FORMAT HIT ==========
 def format_hit_info(username, password, service, data):
-    line = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
     desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     
-    msg = f"{line}\n{icon} <b>HIT - {desc}</b>\n{line}\n"
+    msg = f"✅ <b>HIT - {desc}</b>\n"
     msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
     
     field_map = {
@@ -1021,7 +1019,6 @@ def format_hit_info(username, password, service, data):
     if info_lines:
         msg += "\n" + "\n".join(info_lines)
     
-    msg += f"\n\n{line}"
     return msg
 
 # ========== CHECK FUNCTIONS ==========
@@ -1029,9 +1026,15 @@ def check_single(chat_id, username, password, service="lienquan"):
     result = check_account_api(username, password, service, use_delay=False)
     result_type = result.get("result", "unknown")
     
+    # Bỏ qua BAN và ERROR, chỉ hiển thị HIT và DEAD
     if result_type == "banned":
-        safe_send_message(chat_id, f"🚫 <b>BANNED</b>\n🔑 <code>{username}:{password}</code>")
+        # Không hiển thị gì, chỉ update stats
         update_stats(banned_count=1, service=service)
+        return
+    elif result_type == "error":
+        # Không hiển thị gì, chỉ update stats
+        update_stats(error_count=1, service=service)
+        return
     elif result_type == "hit":
         safe_send_message(chat_id, format_hit_info(username, password, service, result))
         update_stats(hit_count=1, hit_details=[{"user": username, "pwd": password, "service": service, "time": datetime.now().isoformat()}], service=service)
@@ -1039,7 +1042,7 @@ def check_single(chat_id, username, password, service="lienquan"):
         safe_send_message(chat_id, f"❌ <b>DEAD - {SERVICE_ROUTES.get(service, {}).get('desc', service)}</b>\n🔑 <code>{username}:{password}</code>")
         update_stats(dead_count=1, service=service)
     else:
-        safe_send_message(chat_id, f"⚠️ <b>ERROR - {SERVICE_ROUTES.get(service, {}).get('desc', service)}</b>\n🔑 <code>{username}:{password}</code>")
+        # Không hiển thị lỗi không xác định
         update_stats(error_count=1, service=service)
 
 def check_batch(chat_id, accounts, service):
@@ -1069,14 +1072,18 @@ def check_batch(chat_id, accounts, service):
             result = check_account_api(user, pwd, service, use_delay=False)
             with stats_lock:
                 stats["checked"] += 1
-                if result.get("result") == "banned":
+                result_type = result.get("result", "unknown")
+                if result_type == "banned":
                     stats["banned"] += 1
-                elif result.get("result") == "hit":
+                elif result_type == "error":
+                    stats["errors"] += 1
+                elif result_type == "hit":
                     stats["hits"] += 1
                     hit_details.append({"user": user, "pwd": pwd, "service": service, "time": datetime.now().isoformat()})
                     safe_send_message(chat_id, format_hit_info(user, pwd, service, result))
-                elif result.get("result") == "dead":
+                elif result_type == "dead":
                     stats["dead"] += 1
+                    safe_send_message(chat_id, f"❌ <b>DEAD - {SERVICE_ROUTES.get(service, {}).get('desc', service)}</b>\n🔑 <code>{user}:{pwd}</code>")
                 else:
                     stats["errors"] += 1
         
@@ -1095,7 +1102,7 @@ def check_batch(chat_id, accounts, service):
     update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], 
                  banned_count=stats["banned"], accounts=accounts, hit_details=hit_details, service=service)
     
-    safe_send_message(chat_id, f"✅ CHECK HOAN TAT!\n━━━━━━━━━━━━━━━━\n📊 Tong: {stats['total']}\n🎯 HIT: {stats['hits']}\n❌ DEAD: {stats['dead']}\n🚫 BANNED: {stats['banned']}\n⚠️ ERROR: {stats['errors']}\n⏱ {elapsed:.1f}s")
+    safe_send_message(chat_id, f"✅ CHECK HOAN TAT!\n📊 Tong: {stats['total']}\n🎯 HIT: {stats['hits']}\n❌ DEAD: {stats['dead']}\n🚫 BANNED: {stats['banned']}\n⚠️ ERROR: {stats['errors']}\n⏱ {elapsed:.1f}s")
 
 def check_all_services(chat_id, accounts):
     global checking
@@ -1128,13 +1135,16 @@ def check_all_services(chat_id, accounts):
             result = check_account_api(user, pwd, service, use_delay=False)
             with stats_lock:
                 stats_all["checked"] += 1
-                if result.get("result") == "banned":
+                result_type = result.get("result", "unknown")
+                if result_type == "banned":
                     stats_all["banned"] += 1
-                elif result.get("result") == "hit":
+                elif result_type == "error":
+                    stats_all["errors"] += 1
+                elif result_type == "hit":
                     stats_all["hits"] += 1
                     hit_details.append({"user": user, "pwd": pwd, "service": service, "time": datetime.now().isoformat()})
                     safe_send_message(chat_id, format_hit_info(user, pwd, service, result))
-                elif result.get("result") == "dead":
+                elif result_type == "dead":
                     stats_all["dead"] += 1
                 else:
                     stats_all["errors"] += 1
@@ -1154,7 +1164,7 @@ def check_all_services(chat_id, accounts):
     update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"],
                  banned_count=stats_all["banned"], accounts=accounts, hit_details=hit_details, service="fullpack")
     
-    safe_send_message(chat_id, f"✅ CHECK ALL HOAN TAT!\n━━━━━━━━━━━━━━━━\n🎯 HIT: {stats_all['hits']}\n❌ DEAD: {stats_all['dead']}\n🚫 BANNED: {stats_all['banned']}\n⚠️ ERRORS: {stats_all['errors']}\n⏱ {elapsed:.1f}s")
+    safe_send_message(chat_id, f"✅ CHECK ALL HOAN TAT!\n🎯 HIT: {stats_all['hits']}\n❌ DEAD: {stats_all['dead']}\n🚫 BANNED: {stats_all['banned']}\n⚠️ ERRORS: {stats_all['errors']}\n⏱ {elapsed:.1f}s")
 
 # ========== BOT COMMANDS ==========
 @bot.message_handler(commands=['start'])
@@ -1162,7 +1172,7 @@ def cmd_start(message):
     if not check_membership(message):
         return
     safe_send_message(message.chat.id, f"""
-🤖 <b>GARENA CHECKER  - PROFESSIONAL</b>
+🐤 <b>GARENA CHECKER </b>
 👤 Admin: @baohuyno1
 
 📌 <b>LENH:</b>
@@ -1293,11 +1303,12 @@ def handle_document(message):
 
 def main():
     print("=" * 60)
-    print("    GARENA CHECKER V8.5 - PROFESSIONAL SYSTEM")
+    print("    GARENA CHECKER V8.7 - FULL SYSTEM + FILTER BAN")
     print("    ADMIN: @baohuyno1")
+    print("    ===== LOC ACC BAN - KHONG HIEN THI ===== ")
+    print("    ===== LOC ACC ERROR - KHONG HIEN THI ===== ")
+    print("    ===== CHI HIEN THI HIT VA DEAD ===== ")
     print("    ===== WEB DASHBOARD + CHART.JS ===== ")
-    print("    ===== HIT FORMAT CHUYEN NGHIEP ===== ")
-    print("    ===== THONG KE SERVICE + USER ===== ")
     print("=" * 60)
     
     while True:
