@@ -693,7 +693,7 @@ def start_render_server():
 threading.Thread(target=start_render_server, daemon=True).start()
 
 # ========== CẤU HÌNH API MỚI ==========
-TELEGRAM_BOT_TOKEN = "6367532329:AAEem2DziNWKZtFrA8goj5PGTOI4MVT7IKA"
+TELEGRAM_BOT_TOKEN = "6367532329:AAEewaS0Vd8VjIlB941QXwDzZYtnTwQYBY4"
 ADMIN_CHAT_ID = "5736655322"
 ADMIN_USERNAME = "baohuyno1"
 
