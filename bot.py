@@ -545,7 +545,7 @@ def start_render_server():
 threading_module.Thread(target=start_render_server, daemon=True).start()
 
 # ========== CAU HINH - API VERSION 2.1 ==========
-TELEGRAM_BOT_TOKEN = "6367532329:AAEem2DziNWKZtFrA8goj5PGTOI4MVT7IKA"
+TELEGRAM_BOT_TOKEN = "6367532329:AAEewaS0Vd8VjIlB941QXwDzZYtnTwQYBY4"
 ADMIN_CHAT_ID = "5736655322"
 ADMIN_USERNAME = "baohuyno1"
 
