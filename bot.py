@@ -125,15 +125,15 @@ border:1px solid rgba(0,255,0,0.2);border-radius:14px;padding:18px;text-align:ce
 .v.b{{color:#f63}} .v.c{{color:#0cf}} .v.t{{color:#f0f;font-size:1.1em}}
 @media(max-width:768px){{.t{{font-size:1.7em}}.g{{grid-template-columns:repeat(2,1fr)}}}}
 </style></head><body><canvas id="mx"></canvas><div class="w"><div class="h">
-<div class="t">ð® LIEN QUAN CHECKER</div>
+<div class="t">🎮 LIEN QUAN CHECKER</div>
 <div class="s">V10.0 - FULL</div>
 <div class="s">Admin: @{ADMIN_USERNAME}</div>
 <div class="b">{stt}</div></div>
 <div class="g">
-<div class="c"><div class="v">{stats.get('hits',0)}</div><div class="l">â Hits</div></div>
-<div class="c"><div class="v b">{stats.get('banned',0)}</div><div class="l">ð« Banned</div></div>
-<div class="c"><div class="v c">{stats.get('clean',0)}</div><div class="l">ð¢ Clean</div></div>
-<div class="c"><div class="v t">{now}</div><div class="l">ð Time</div></div>
+<div class="c"><div class="v">{stats.get('hits',0)}</div><div class="l">✅ Hits</div></div>
+<div class="c"><div class="v b">{stats.get('banned',0)}</div><div class="l">🚫 Banned</div></div>
+<div class="c"><div class="v c">{stats.get('clean',0)}</div><div class="l">🟢 Clean</div></div>
+<div class="c"><div class="v t">{now}</div><div class="l">📅 Time</div></div>
 </div></div><audio loop autoplay><source src="/audio"></audio>
 <script>const c=document.getElementById('mx'),x=c.getContext('2d');
 c.width=innerWidth;c.height=innerHeight;const ch='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
@@ -150,7 +150,7 @@ setInterval(()=>{{fetch('/stats').then(r=>r.json()).then(d=>{{
 document.querySelectorAll('.v')[0].textContent=d.stats.hits||0;
 document.querySelectorAll('.v')[1].textContent=d.stats.banned||0;
 document.querySelectorAll('.v')[2].textContent=d.stats.clean||0;
-const b=document.querySelector('.b');b.textContent=d.checking?'ð´ Dang check':'ð¢ San sang';
+const b=document.querySelector('.b');b.textContent=d.checking?'🔴 Dang check':'🟢 San sang';
 b.style.background=d.checking?'#ff9800':'#4caf50';}}).catch(()=>{{}});}},5000);
 </script></body></html>"""
 
@@ -220,7 +220,7 @@ SERVICE_ROUTES = {
     "lienquan": {
         "route": "/api/lienquan",
         "desc": "Lien Quan",
-        "icon": "ð®",
+        "icon": "🎮",
         "params": ["tk", "mk"],
         "extra_params": {"proxy": ""}
     }
@@ -279,14 +279,14 @@ api_cache = TTLCache()
 
 # ========== BAN DETECTION ==========
 BAN_KEYWORDS = [
-    "banned", "ban", "bi khoa", "bá» khÃ³a", "khoa", "khÃ³a",
+    "banned", "ban", "bi khoa", "bị khóa", "khoa", "khóa",
     "blocked", "block", "suspended", "suspend", "locked", "lock",
-    "vi pham", "vi pháº¡m", "violation", "vipham",
-    "khoa tai khoan", "khÃ³a tÃ i khoáº£n", "account locked",
+    "vi pham", "vi phạm", "violation", "vipham",
+    "khoa tai khoan", "khóa tài khoản", "account locked",
     "account banned", "account suspended", "permanently banned",
-    "tam khoa", "táº¡m khÃ³a", "temporary ban", "permanent ban",
-    "vinh vien", "vÄ©nh viá»n", "permanent", "dÃ­nh sÄt", "dinh sdt",
-    "dÃ­nh fb", "dinh fb"
+    "tam khoa", "tạm khóa", "temporary ban", "permanent ban",
+    "vinh vien", "vĩnh viễn", "permanent", "dính sđt", "dinh sdt",
+    "dính fb", "dinh fb"
 ]
 
 
@@ -318,7 +318,7 @@ def is_account_banned(result_data):
                     return False, f"{f}={v}"
                 for kw in BAN_KEYWORDS:
                     if kw in vl:
-                        if any(n in vl for n in ["khong", "khÃ´ng", "not ", "un", "no "]):
+                        if any(n in vl for n in ["khong", "không", "not ", "un", "no "]):
                             continue
                         return True, f"{f} chua '{kw}'"
 
@@ -342,9 +342,9 @@ def is_account_banned(result_data):
             m = str(result_data[f]).lower()
             for kw in BAN_KEYWORDS:
                 if kw in m:
-                    if any(n in m for n in ["khong bi", "khÃ´ng bá»", "not banned",
-                                             "chua bi", "chÆ°a bá»", "unbanned",
-                                             "khong khoa", "khÃ´ng khÃ³a"]):
+                    if any(n in m for n in ["khong bi", "không bị", "not banned",
+                                             "chua bi", "chưa bị", "unbanned",
+                                             "khong khoa", "không khóa"]):
                         continue
                     return True, f"{f} chua '{kw}'"
 
@@ -392,13 +392,13 @@ def _is_empty(v):
 
 
 def format_hit_info(username, password, service, result_data):
-    sep = "âââââââââ â HIT âââââââââ"
+    sep = "━━━━━━━━━ ✅ HIT ━━━━━━━━━"
     is_banned, ban_reason = is_account_banned(result_data)
     lines = [sep, ""]
-    lines.append(f"ð <code>{username}:{password}</code>")
+    lines.append(f"🔑 <code>{username}:{password}</code>")
 
     if not isinstance(result_data, dict):
-        lines.append("âââââââââââââââââââââââââ")
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━")
         return "\n".join(lines)
 
     def g(*keys):
@@ -427,26 +427,26 @@ def format_hit_info(username, password, service, result_data):
         return fix_encoding(str(v))
 
     mapping = [
-        ("ð¤ UID", ["uid", "id"], None),
-        ("ð¤ Nickname", ["nickname", "aov_name", "name"], None),
-        ("ð Region", ["region", "server"], None),
-        ("ð² SÃ²", ["so", "shells"], None),
-        ("ð° Náº¡p sÃ²", ["nap_so"], None),
-        ("ð© EMAIL", ["email_verified", "email"], "bool"),
-        ("ð± SÄT", ["mobile_bound", "phone", "sdt"], "sdt"),
-        ("ð¡ PASS", ["password_set"], "bool"),
-        ("ð FB", ["fb_linked", "fb"], "fb"),
-        ("â° Login cuá»i", ["last_login"], None),
-        ("ð Táº¡o GR", ["garena_created", "created_at"], None),
-        ("ð¥ NAME", ["aov_name"], None),
-        ("ð RANK", ["aov_rank"], None),
-        ("â¨ LEVEL", ["aov_level"], None),
-        ("ð NgÃ y táº¡o TK", ["ngay_tao_tk"], None),
-        ("ð SKIN", ["aov_total_skins"], None),
-        ("ðª HERO", ["aov_total_champs", "aov_total_heroes"], None),
-        ("â¡ï¸ QH", ["aov_total_relationships"], None),
-        ("ð CCCD", ["cccd"], "bool"),
-        ("ð¡ Authen", ["authen"], "bool"),
+        ("👤 UID", ["uid", "id"], None),
+        ("👤 Nickname", ["nickname", "aov_name", "name"], None),
+        ("🌐 Region", ["region", "server"], None),
+        ("💲 Sò", ["so", "shells"], None),
+        ("💰 Nạp sò", ["nap_so"], None),
+        ("📩 EMAIL", ["email_verified", "email"], "bool"),
+        ("📱 SĐT", ["mobile_bound", "phone", "sdt"], "sdt"),
+        ("🛡 PASS", ["password_set"], "bool"),
+        ("🔗 FB", ["fb_linked", "fb"], "fb"),
+        ("⏰ Login cuối", ["last_login"], None),
+        ("📅 Tạo GR", ["garena_created", "created_at"], None),
+        ("🔥 NAME", ["aov_name"], None),
+        ("👑 RANK", ["aov_rank"], None),
+        ("✨ LEVEL", ["aov_level"], None),
+        ("📅 Ngày tạo TK", ["ngay_tao_tk"], None),
+        ("💎 SKIN", ["aov_total_skins"], None),
+        ("💪 HERO", ["aov_total_champs", "aov_total_heroes"], None),
+        ("⚡️ QH", ["aov_total_relationships"], None),
+        ("📄 CCCD", ["cccd"], "bool"),
+        ("🛡 Authen", ["authen"], "bool"),
     ]
 
     ban_val = g("banned", "ban", "aov_banned")
@@ -480,44 +480,44 @@ def format_hit_info(username, password, service, result_data):
         elif isinstance(bv, str):
             bv = bv.upper()
         if ban_until and bv == "YES":
-            lines.append(f"ð« BAND: YES [Äáº¿n {fs(ban_until)}]")
+            lines.append(f"🚫 BAND: YES [đến {fs(ban_until)}]")
         elif bv:
-            lines.append(f"ð« BAND: {bv}")
+            lines.append(f"🚫 BAND: {bv}")
 
     ss_list = g("aov_ss_list")
     ss_cnt = g("aov_ss")
     if ss_list:
-        lines.append(f"â¨ SS: {ss_cnt or len(ss_list)} [{fl(ss_list)}]")
+        lines.append(f"✨ SS: {ss_cnt or len(ss_list)} [{fl(ss_list)}]")
     elif ss_cnt is not None:
-        lines.append(f"â¨ SS: {fs(ss_cnt)}")
+        lines.append(f"✨ SS: {fs(ss_cnt)}")
 
     sss_list = g("aov_sss_list")
     sss_cnt = g("aov_sss")
     if sss_list:
-        lines.append(f"ð¥ SSS: {sss_cnt or len(sss_list)} [{fl(sss_list)}]")
+        lines.append(f"🔥 SSS: {sss_cnt or len(sss_list)} [{fl(sss_list)}]")
     elif sss_cnt is not None:
-        lines.append(f"ð¥ SSS: {fs(sss_cnt)}")
+        lines.append(f"🔥 SSS: {fs(sss_cnt)}")
 
     anime_list = g("aov_anime_list")
     anime_cnt = g("aov_anime")
     if anime_list:
-        lines.append(f"ð¥ Anime: {anime_cnt or len(anime_list)} [{fl(anime_list)}]")
+        lines.append(f"🔥 Anime: {anime_cnt or len(anime_list)} [{fl(anime_list)}]")
     elif anime_cnt is not None:
-        lines.append(f"ð¥ Anime: {fs(anime_cnt)}")
+        lines.append(f"🔥 Anime: {fs(anime_cnt)}")
 
     other_list = g("aov_other_list")
     other_cnt = g("aov_other")
     if other_list:
-        lines.append(f"ð² Other: {other_cnt or len(other_list)} [{fl(other_list)}]")
+        lines.append(f"🎲 Other: {other_cnt or len(other_list)} [{fl(other_list)}]")
     elif other_cnt is not None:
-        lines.append(f"ð² Other: {fs(other_cnt)}")
+        lines.append(f"🎲 Other: {fs(other_cnt)}")
 
     tt = g("tinh_trang", "status_account")
     if tt is not None:
         lines.append("")
-        lines.append(f"ð TÃ¬nh Tráº¡ng: {fs(tt)}")
+        lines.append(f"📋 Tình Trạng: {fs(tt)}")
 
-    lines.append("âââââââââââââââââââââââââ")
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━")
     return "\n".join(lines)
 
 
@@ -535,14 +535,14 @@ def rate_limit(delay=DEFAULT_DELAY):
 def fix_encoding(text):
     if not isinstance(text, str):
         return text
-    r = {'ÃÂ¡': 'Ã¡', 'Ã ': 'Ã ', 'Ã¡ÂºÂ£': 'áº£', 'ÃÂ£': 'Ã£', 'Ã¡ÂºÂ¡': 'áº¡',
-         'Ã': 'Ä', 'ÃÂ°': 'Æ°', 'ÃÂ¡': 'Æ¡', 'ÃÂ´': 'Ã´', 'ÃÂ¢': 'Ã¢',
-         'ÃÆ': 'Ä', 'ÃÂª': 'Ãª', 'ÃÂ­': 'Ã­', 'ÃÂ¬': 'Ã¬', 'Ã¡Â»â¹': 'á»',
-         'Ã¡Â»â°': 'á»', 'ÃÂ©': 'Ä©', 'ÃÂ³': 'Ã³', 'ÃÂ²': 'Ã²', 'ÃÂº': 'Ãº',
-         'ÃÂ¹': 'Ã¹', 'ÃÂ½': 'Ã½', 'Ã¡Â»Â³': 'á»³', 'Ã¡Â»Â·': 'á»·', 'Ã¡Â»Âµ': 'á»µ'}
+    r = {'Ã¡': 'á', 'Ã ': 'à', 'áº£': 'ả', 'Ã£': 'ã', 'áº¡': 'ạ',
+         'Ä': 'Đ', 'Æ°': 'ư', 'Æ¡': 'ơ', 'Ã´': 'ô', 'Ã¢': 'â',
+         'Äƒ': 'ă', 'Ãª': 'ê', 'Ã­': 'í', 'Ã¬': 'ì', 'á»‹': 'ị',
+         'á»‰': 'ỉ', 'Ä©': 'ĩ', 'Ã³': 'ó', 'Ã²': 'ò', 'Ãº': 'ú',
+         'Ã¹': 'ù', 'Ã½': 'ý', 'á»³': 'ỳ', 'á»·': 'ỷ', 'á»µ': 'ỵ'}
     for o, n in r.items():
         text = text.replace(o, n)
-    if any(c in text for c in ['Ã', 'Ã', 'Ã', 'Ã¡Â»', 'Ã¡Âº', 'ÃÂ©', 'ÃÂ©']):
+    if any(c in text for c in ['Ã', 'Ä', 'Æ', 'á»', 'áº', 'Å©', 'Ä©']):
         try:
             fx = text.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore')
             if fx != text and len(fx) > 0:
@@ -566,19 +566,19 @@ def check_membership(message):
         return True
     mk = telebot.types.InlineKeyboardMarkup()
     mk.add(telebot.types.InlineKeyboardButton(
-        text="ð¢ THAM GIA KENH", url=REQUIRED_CHANNEL_URL))
+        text="📢 THAM GIA KENH", url=REQUIRED_CHANNEL_URL))
     mk.add(telebot.types.InlineKeyboardButton(
-        text="â TOI DA THAM GIA", callback_data="check_join"))
+        text="✅ TOI DA THAM GIA", callback_data="check_join"))
     safe_send_message(message.chat.id, f"""
-ð <b>CHUA THAM GIA KENH!</b>
+🔒 <b>CHUA THAM GIA KENH!</b>
 
-ð¢ Vui long tham gia:
-ð <a href="{REQUIRED_CHANNEL_URL}"><b>{REQUIRED_CHANNEL}</b></a>
+📢 Vui long tham gia:
+👉 <a href="{REQUIRED_CHANNEL_URL}"><b>{REQUIRED_CHANNEL}</b></a>
 
 Sau do bam nut xac nhan!
 """)
     try:
-        bot.send_message(message.chat.id, "ð Xac nhan:", reply_markup=mk)
+        bot.send_message(message.chat.id, "👇 Xac nhan:", reply_markup=mk)
     except:
         pass
     return False
@@ -587,15 +587,15 @@ Sau do bam nut xac nhan!
 @bot.callback_query_handler(func=lambda c: c.data == "check_join")
 def cb_check_join(call):
     if is_user_member(call.from_user.id):
-        bot.answer_callback_query(call.id, "â OK!")
+        bot.answer_callback_query(call.id, "✅ OK!")
         try:
             bot.delete_message(call.message.chat.id, call.message.message_id)
         except:
             pass
         safe_send_message(call.message.chat.id,
-                          "â <b>XAC NHAN THANH CONG!</b>\n\n/start de bat dau.")
+                          "✅ <b>XAC NHAN THANH CONG!</b>\n\n/start de bat dau.")
     else:
-        bot.answer_callback_query(call.id, "â Chua tham gia!", show_alert=True)
+        bot.answer_callback_query(call.id, "❌ Chua tham gia!", show_alert=True)
 
 
 def safe_send_message(chat_id, text, parse_mode="HTML"):
@@ -653,7 +653,7 @@ def is_time_value(value):
         r'^\d{2}-\d{2}-\d{4}$',
         r'^\d{2}/\d{2}/\d{4}$',
         r'^\d{1,2}h\d{2}(p\d{2})?$',
-        r'^\d{1,2}giá»\d{2}$',
+        r'^\d{1,2}giờ\d{2}$',
         r'^\d{1,2}:\d{2}:\d{2}\.\d+$',
         r'^\d+:\d+$',
         r'^\d+\.\d+$',
@@ -913,7 +913,7 @@ def parse_api_response(r):
 # ========== CHECK ==========
 def check_single(chat_id, username, password, service="lienquan"):
     safe_send_message(chat_id,
-                      f"ð Dang check <code>{username}:{password}</code>...")
+                      f"🔍 Dang check <code>{username}:{password}</code>...")
     r = check_account_api(username, password, service, use_delay=False)
     rt = r.get("result", "unknown")
     if rt == "hit":
@@ -921,9 +921,9 @@ def check_single(chat_id, username, password, service="lienquan"):
         if is_b:
             save_to_file(BANNED_OUTPUT_FILE, username, password,
                          f"{service}|{reason}")
-            safe_send_message(chat_id, "ð« <b>ACC BI BAN - DA LOAI BO</b>")
+            safe_send_message(chat_id, "🚫 <b>ACC BI BAN - DA LOAI BO</b>")
             safe_send_message(chat_id,
-                              f"ð« <b>BAN</b> | <code>{username}:{password}</code>")
+                              f"🚫 <b>BAN</b> | <code>{username}:{password}</code>")
         else:
             save_to_file(CLEAN_OUTPUT_FILE, username, password)
             safe_send_message(chat_id,
@@ -931,18 +931,18 @@ def check_single(chat_id, username, password, service="lienquan"):
     elif rt == "dead":
         save_to_file(DEAD_OUTPUT_FILE, username, password)
         safe_send_message(chat_id,
-                          f"â DEAD\nð <code>{username}:{password}</code>")
+                          f"❌ DEAD\n🔑 <code>{username}:{password}</code>")
     else:
         save_to_file(ERROR_OUTPUT_FILE, username, password)
         safe_send_message(chat_id,
-                          f"â ï¸ ERROR\nð <code>{username}:{password}</code>")
+                          f"⚠️ ERROR\n🔑 <code>{username}:{password}</code>")
 
 
 def check_batch(chat_id, accounts, service="lienquan"):
     global checking, stats
 
     if checking:
-        safe_send_message(chat_id, "â ï¸ Dang check roi!")
+        safe_send_message(chat_id, "⚠️ Dang check roi!")
         return
 
     checking = True
@@ -956,17 +956,17 @@ def check_batch(chat_id, accounts, service="lienquan"):
              "retries": 0, "cache_hits": 0, "removed": 0,
              "start_time": time.time()}
 
-    icon = SERVICE_ROUTES.get(service, {}).get("icon", "ð")
+    icon = SERVICE_ROUTES.get(service, {}).get("icon", "🔍")
 
     safe_send_message(chat_id, f"""
 {icon} <b>CHECK LIEN QUAN V10.0</b>
-ð Tong: <code>{total}</code> accounts
-â¡ Threads: <code>{CHECKMULTI_THREADS}</code>
-â± Delay: <code>{CHECKMULTI_DELAY}s</code>
-ð¦ Batch: <code>{CHECKMULTI_BATCH_SIZE}</code>
-ð Retry: <code>{DEFAULT_RETRIES}</code>
-ð§¹ <b>AUTO LOAI BO ACC BAN</b>
-ð¨ <b>GUI ACC CLEAN TRUC TIEP</b>
+📊 Tong: <code>{total}</code> accounts
+⚡ Threads: <code>{CHECKMULTI_THREADS}</code>
+⏱ Delay: <code>{CHECKMULTI_DELAY}s</code>
+📦 Batch: <code>{CHECKMULTI_BATCH_SIZE}</code>
+🔁 Retry: <code>{DEFAULT_RETRIES}</code>
+🧹 <b>AUTO LOAI BO ACC BAN</b>
+📨 <b>GUI ACC CLEAN TRUC TIEP</b>
 """)
 
     batches = [accounts[i:i + CHECKMULTI_BATCH_SIZE]
@@ -1041,7 +1041,7 @@ def check_batch(chat_id, accounts, service="lienquan"):
                 if item["is_banned"]:
                     safe_send_message(
                         chat_id,
-                        f"ð« <b>BAN</b> | <code>{item['user']}:{item['pwd']}</code>"
+                        f"🚫 <b>BAN</b> | <code>{item['user']}:{item['pwd']}</code>"
                     )
                 else:
                     safe_send_message(
@@ -1060,13 +1060,13 @@ def check_batch(chat_id, accounts, service="lienquan"):
         eta_str = time.strftime("%M:%S", time.gmtime(eta)) if eta < 3600 else ">1h"
 
         safe_send_message(chat_id, f"""
-ð¦ <b>BATCH {bn}/{len(batches)}</b> - {pct:.1f}%
-â Hits: <code>{stats['hits']}</code>
-ð¢ Clean: <code>{stats['clean']}</code>
-ð« Banned: <code>{stats['banned']}</code>
-â Dead: <code>{stats['dead']}</code>
-â ï¸ Errors: <code>{stats['errors']}</code>
-â¡ <code>{spd:.1f}</code> acc/s | â± ETA <code>{eta_str}</code>
+📦 <b>BATCH {bn}/{len(batches)}</b> - {pct:.1f}%
+✅ Hits: <code>{stats['hits']}</code>
+🟢 Clean: <code>{stats['clean']}</code>
+🚫 Banned: <code>{stats['banned']}</code>
+❌ Dead: <code>{stats['dead']}</code>
+⚠️ Errors: <code>{stats['errors']}</code>
+⚡ <code>{spd:.1f}</code> acc/s | ⏱ ETA <code>{eta_str}</code>
 """)
 
         if bn < len(batches):
@@ -1080,22 +1080,22 @@ def check_batch(chat_id, accounts, service="lienquan"):
         all_queued_accounts[chat_id] = []
 
     safe_send_message(chat_id, f"""
-â <b>CHECK HOAN TAT!</b>
-ââââââââââââââââââââ
-ð Tong: <code>{stats['total']}</code>
-ð¯ HIT: <code>{stats['hits']}</code>
-ð¢ Clean: <code>{stats['clean']}</code>
-ð« Banned: <code>{stats['banned']}</code>
-ð§¹ Da loai bo: <code>{stats['removed']}</code>
-â DEAD: <code>{stats['dead']}</code>
-â ï¸ ERROR: <code>{stats['errors']}</code>
-ð Retries: <code>{stats['retries']}</code>
-ð¾ Cache: <code>{stats['cache_hits']}</code>
-â± Time: <code>{elapsed:.1f}s</code>
-â¡ Speed: <code>{spd:.1f}</code> acc/s
-ââââââââââââââââââââ
-ð <code>{CLEAN_OUTPUT_FILE}</code>
-ð <code>{BANNED_OUTPUT_FILE}</code>
+✅ <b>CHECK HOAN TAT!</b>
+━━━━━━━━━━━━━━━━━━━━
+📊 Tong: <code>{stats['total']}</code>
+🎯 HIT: <code>{stats['hits']}</code>
+🟢 Clean: <code>{stats['clean']}</code>
+🚫 Banned: <code>{stats['banned']}</code>
+🧹 Da loai bo: <code>{stats['removed']}</code>
+❌ DEAD: <code>{stats['dead']}</code>
+⚠️ ERROR: <code>{stats['errors']}</code>
+🔁 Retries: <code>{stats['retries']}</code>
+💾 Cache: <code>{stats['cache_hits']}</code>
+⏱ Time: <code>{elapsed:.1f}s</code>
+⚡ Speed: <code>{spd:.1f}</code> acc/s
+━━━━━━━━━━━━━━━━━━━━
+📁 <code>{CLEAN_OUTPUT_FILE}</code>
+📁 <code>{BANNED_OUTPUT_FILE}</code>
 """)
 
     if stats["clean"] > 0 and os.path.exists(CLEAN_OUTPUT_FILE):
@@ -1103,8 +1103,8 @@ def check_batch(chat_id, accounts, service="lienquan"):
             with open(CLEAN_OUTPUT_FILE, 'rb') as f:
                 bot.send_document(
                     chat_id, f,
-                    caption=f"ð¢ <b>TAT CA ACC CLEAN</b>\n"
-                            f"ð So luong: <code>{stats['clean']}</code>",
+                    caption=f"🟢 <b>TAT CA ACC CLEAN</b>\n"
+                            f"📊 So luong: <code>{stats['clean']}</code>",
                     parse_mode="HTML"
                 )
         except Exception as e:
@@ -1117,13 +1117,13 @@ def cmd_start(message):
     if not check_membership(message):
         return
     safe_send_message(message.chat.id, f"""
-ð® <b>LIEN QUAN CHECKER V10.0</b>
-ð¤ Admin: @{ADMIN_USERNAME}
+🎮 <b>LIEN QUAN CHECKER V10.0</b>
+👤 Admin: @{ADMIN_USERNAME}
 
-ð§¹ <b>Tá»° Äá»NG LOáº I Bá» ACC BAN</b>
-ð¨ <b>Gá»¬I ACC CLEAN TRá»°C TIáº¾P</b>
+🧹 <b>TỰ ĐỘNG LOẠI BỎ ACC BAN</b>
+📨 <b>GỬI ACC CLEAN TRỰC TIẾP</b>
 
-ð <b>LENH:</b>
+📌 <b>LENH:</b>
 /check user:pass - Check 1 acc
 /checkmulti u1:p1,u2:p2 - Check nhieu
 /checkall - Check tat ca
@@ -1142,12 +1142,12 @@ def cmd_check(message):
         return
     parts = message.text.split()
     if len(parts) < 2:
-        safe_send_message(message.chat.id, "â /check user:pass")
+        safe_send_message(message.chat.id, "❌ /check user:pass")
         return
     acc_input = parts[1].replace('|', ':')
     accounts, _ = loc_tk_mk_only(acc_input)
     if not accounts:
-        safe_send_message(message.chat.id, "â Format sai!")
+        safe_send_message(message.chat.id, "❌ Format sai!")
         return
     u, p = accounts[0]
     threading.Thread(target=check_single,
@@ -1164,15 +1164,15 @@ def cmd_checkmulti(message):
         text = text[len('/checkmulti'):].strip()
     if not text:
         safe_send_message(message.chat.id,
-                          "â /checkmulti user1:pass1\\nuser2:pass2")
+                          "❌ /checkmulti user1:pass1\\nuser2:pass2")
         return
     acc_input = text.replace(',', '\n').replace('|', ':')
     accounts, _ = loc_tk_mk_only(acc_input)
     if not accounts:
-        safe_send_message(message.chat.id, "â Khong tim thay acc!")
+        safe_send_message(message.chat.id, "❌ Khong tim thay acc!")
         return
     safe_send_message(message.chat.id,
-                      f"ð Check {len(accounts)} accounts...")
+                      f"📊 Check {len(accounts)} accounts...")
     threading.Thread(target=check_batch,
                      args=(message.chat.id, accounts, "lienquan"),
                      daemon=True).start()
@@ -1184,7 +1184,7 @@ def cmd_checkall(message):
         return
     cid = message.chat.id
     if checking:
-        safe_send_message(cid, "â ï¸ Dang check roi! Doi hoac /stop.")
+        safe_send_message(cid, "⚠️ Dang check roi! Doi hoac /stop.")
         return
 
     accs = []
@@ -1197,11 +1197,11 @@ def cmd_checkall(message):
 
     if not accs:
         safe_send_message(cid,
-                          "â Khong co acc nao! Gui file .txt hoac paste truoc.")
+                          "❌ Khong co acc nao! Gui file .txt hoac paste truoc.")
         return
 
     safe_send_message(cid,
-                      f"ð Tu dong check {len(accs)} accounts, loai bo acc bi ban...")
+                      f"🚀 Tu dong check {len(accs)} accounts, loai bo acc bi ban...")
     threading.Thread(target=check_batch,
                      args=(cid, accs, "lienquan"),
                      daemon=True).start()
@@ -1214,7 +1214,7 @@ def cmd_queue(message):
     cid = message.chat.id
     accs = pending_accounts.get(cid) or all_queued_accounts.get(cid) or []
     safe_send_message(cid,
-                      f"ð Dang cho: <code>{len(accs)}</code> accounts\n"
+                      f"📋 Dang cho: <code>{len(accs)}</code> accounts\n"
                       f"Gui /checkall de bat dau.")
 
 
@@ -1225,7 +1225,7 @@ def cmd_stop(message):
     stop_event.set()
     global checking
     checking = False
-    safe_send_message(message.chat.id, "ð Da dung check!")
+    safe_send_message(message.chat.id, "🛑 Da dung check!")
 
 
 @bot.message_handler(commands=['bannedstats'])
@@ -1241,36 +1241,36 @@ def cmd_bannedstats(message):
                 c = sum(1 for _ in f)
         counts[fn] = c
     safe_send_message(message.chat.id, f"""
-ð <b>THONG KE FILE</b>
-ð¢ Clean: <code>{counts[CLEAN_OUTPUT_FILE]}</code>
-ð« Banned: <code>{counts[BANNED_OUTPUT_FILE]}</code>
-ð¯ Hits: <code>{counts[HIT_OUTPUT_FILE]}</code>
-â Dead: <code>{counts[DEAD_OUTPUT_FILE]}</code>
-â ï¸ Error: <code>{counts[ERROR_OUTPUT_FILE]}</code>
+📊 <b>THONG KE FILE</b>
+🟢 Clean: <code>{counts[CLEAN_OUTPUT_FILE]}</code>
+🚫 Banned: <code>{counts[BANNED_OUTPUT_FILE]}</code>
+🎯 Hits: <code>{counts[HIT_OUTPUT_FILE]}</code>
+❌ Dead: <code>{counts[DEAD_OUTPUT_FILE]}</code>
+⚠️ Error: <code>{counts[ERROR_OUTPUT_FILE]}</code>
 """)
 
 
 @bot.message_handler(commands=['clearbanned'])
 def cmd_clearbanned(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "â Khong co quyen!")
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
     clear_output_files()
-    safe_send_message(message.chat.id, "â Da xoa tat ca file output!")
+    safe_send_message(message.chat.id, "✅ Da xoa tat ca file output!")
 
 
 @bot.message_handler(commands=['upaudio'])
 def cmd_upaudio(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "â Khong co quyen!")
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
-    safe_send_message(message.chat.id, "ðµ Gui file .wav hoac .mp3.")
+    safe_send_message(message.chat.id, "🎵 Gui file .wav hoac .mp3.")
 
 
 @bot.message_handler(commands=['delaudio'])
 def cmd_delaudio(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "â Khong co quyen!")
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
     global CUSTOM_AUDIO_DATA
     with AUDIO_LOCK:
@@ -1280,32 +1280,32 @@ def cmd_delaudio(message):
             os.remove(CUSTOM_AUDIO_PATH)
     except:
         pass
-    safe_send_message(message.chat.id, "â Da xoa audio custom!")
+    safe_send_message(message.chat.id, "✅ Da xoa audio custom!")
 
 
 @bot.message_handler(content_types=['audio'])
 def handle_audio(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "â Khong co quyen!")
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
     global CUSTOM_AUDIO_DATA
     try:
         fi = bot.get_file(message.audio.file_id)
         ad = bot.download_file(fi.file_path)
         if not ad:
-            safe_send_message(message.chat.id, "â Khong the tai!")
+            safe_send_message(message.chat.id, "❌ Khong the tai!")
             return
         if len(ad) > 20 * 1024 * 1024:
-            safe_send_message(message.chat.id, "â File qua lon! Max 20MB.")
+            safe_send_message(message.chat.id, "❌ File qua lon! Max 20MB.")
             return
         with AUDIO_LOCK:
             CUSTOM_AUDIO_DATA = ad
         with open(CUSTOM_AUDIO_PATH, 'wb') as f:
             f.write(ad)
         safe_send_message(message.chat.id,
-                          f"â UPLOAD AUDIO OK! {len(ad)/(1024*1024):.2f} MB")
+                          f"✅ UPLOAD AUDIO OK! {len(ad)/(1024*1024):.2f} MB")
     except Exception as e:
-        safe_send_message(message.chat.id, f"â Loi: {e}")
+        safe_send_message(message.chat.id, f"❌ Loi: {e}")
 
 
 @bot.message_handler(content_types=['text'])
@@ -1325,11 +1325,11 @@ def handle_text(message):
     save_loc_file(accounts)
     preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:10]])
     safe_send_message(cid, f"""
-ð LOC {len(accounts)} ACCOUNTS
+📊 LOC {len(accounts)} ACCOUNTS
 Preview:
 {preview}
 
-ð /checkall - Check tat ca (tu dong loai bo ban)
+👇 /checkall - Check tat ca (tu dong loai bo ban)
 """)
 
 
@@ -1346,40 +1346,40 @@ def handle_document(message):
             fi = bot.get_file(message.document.file_id)
             ad = bot.download_file(fi.file_path)
             if not ad:
-                safe_send_message(cid, "â Khong the tai audio!")
+                safe_send_message(cid, "❌ Khong the tai audio!")
                 return
             if len(ad) > 20 * 1024 * 1024:
-                safe_send_message(cid, "â File qua lon! Max 20MB.")
+                safe_send_message(cid, "❌ File qua lon! Max 20MB.")
                 return
             with AUDIO_LOCK:
                 CUSTOM_AUDIO_DATA = ad
             with open(CUSTOM_AUDIO_PATH, 'wb') as f:
                 f.write(ad)
             safe_send_message(cid,
-                              f"â UPLOAD AUDIO OK! {len(ad)/(1024*1024):.2f} MB")
+                              f"✅ UPLOAD AUDIO OK! {len(ad)/(1024*1024):.2f} MB")
             return
         if not fn.endswith('.txt'):
-            safe_send_message(cid, "â Chi ho tro .txt!")
+            safe_send_message(cid, "❌ Chi ho tro .txt!")
             return
         fi = bot.get_file(message.document.file_id)
         content = bot.download_file(fi.file_path).decode('utf-8', errors='ignore')
         accounts, _ = loc_tk_mk_only(content.replace('|', ':'))
         if not accounts:
-            safe_send_message(cid, "â Khong tim thay user:pass!")
+            safe_send_message(cid, "❌ Khong tim thay user:pass!")
             return
         pending_accounts[cid] = accounts
         all_queued_accounts[cid] = list(accounts)
         save_loc_file(accounts)
         preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:20]])
         safe_send_message(cid, f"""
-â LOC {len(accounts)} ACCOUNTS
+✅ LOC {len(accounts)} ACCOUNTS
 Preview:
 {preview}
 
-ð /checkall - Check tat ca (tu dong loai bo ban)
+👇 /checkall - Check tat ca (tu dong loai bo ban)
 """)
     except Exception as e:
-        safe_send_message(cid, f"â Loi: {e}")
+        safe_send_message(cid, f"❌ Loi: {e}")
 
 
 def main():
